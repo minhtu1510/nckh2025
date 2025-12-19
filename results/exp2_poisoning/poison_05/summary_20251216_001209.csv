@@ -1,0 +1,2 @@
+Model,Accuracy,Precision,Recall,F1-Score,Train Time (s)
+SVM,0.9753,0.9543,0.9984,0.9758,87.29

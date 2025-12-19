@@ -1,0 +1,75 @@
+mlp_trabid_jsma:
+  callable: ids_research.models.baselines.adversarial_ml:run_trabid_jsma
+  params: {}
+
+lsvm:
+  callable: ids_research.models.baselines.sklearn_models:train_lsvm
+  params:
+    max_iter: 10000  # Tăng từ 5000
+    C: 1.0
+    verbose: 0
+
+qsvm:
+  callable: ids_research.models.baselines.sklearn_models:train_qsvm
+  params:
+    kernel: poly
+    degree: 2
+    C: 1.0
+    verbose: false
+
+knn:
+  callable: ids_research.models.baselines.sklearn_models:train_knn
+  params:
+    n_neighbors: 5
+    weights: uniform
+    algorithm: auto  # auto sẽ chọn thuật toán tốt nhất
+
+lda:
+  callable: ids_research.models.baselines.sklearn_models:train_lda
+  params:
+    solver: svd  # Stable solver
+
+qda:
+  callable: ids_research.models.baselines.sklearn_models:train_qda
+  params: {}
+
+mlp_classifier:
+  callable: ids_research.models.baselines.sklearn_models:train_mlp_classifier
+  params:
+    hidden_layer_sizes: [256, 128, 64, 32]  # Thêm layers, học sâu hơn
+    activation: relu
+    solver: adam
+    alpha: 0.0001  # L2 regularization
+    batch_size: 32  # Batch nhỏ, học kỹ hơn
+    learning_rate: adaptive  # Adaptive learning rate
+    learning_rate_init: 0.001
+    max_iter: 1000  # Tăng từ 300 lên 1000
+    shuffle: true
+    random_state: 42
+    early_stopping: true  # Dừng khi không cải thiện
+    validation_fraction: 0.1  # 10% data cho validation
+    n_iter_no_change: 20  # Chờ 20 epochs không cải thiện mới dừng
+    verbose: true  # Hiển thị quá trình training
+    tol: 0.0001  # Tolerance cho convergence
+
+lstm:
+  callable: ids_research.models.advanced.lstm:train_lstm_classifier
+  params:
+    epochs: 100  # Tăng epochs
+    batch_size: 32
+    verbose: 1
+
+autoencoder:
+  callable: ids_research.models.advanced.autoencoder:train_autoencoder_detector
+  params:
+    epochs: 100
+    batch_size: 32
+    verbose: 1
+
+latent_defense:
+  callable: ids_research.models.advanced.latent_defense:train_latent_defense
+  params:
+    autoencoder_epochs: 100
+    classifier_epochs: 50
+    batch_size: 32
+    verbose: 1

@@ -1,0 +1,2 @@
+Model,Accuracy,Precision,Recall,F1-Score,Train Time (s)
+KNN,0.9516,0.9842,0.9179,0.9499,0.03

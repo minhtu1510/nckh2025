@@ -1,0 +1,2 @@
+accuracy,precision,recall,f1_score,train_time_seconds,prediction_time_seconds,n_train_samples,n_test_samples,epochs_trained
+0.9908,0.9825009830908376,0.9994,0.9908784453698195,94.16291069984436,0.47132349014282227,30000,10000,14

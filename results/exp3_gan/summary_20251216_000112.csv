@@ -1,0 +1,2 @@
+Model,Accuracy,Precision,Recall,F1-Score,Train Time (s)
+RF,0.6190,0.9571,0.2491,0.3953,20.25

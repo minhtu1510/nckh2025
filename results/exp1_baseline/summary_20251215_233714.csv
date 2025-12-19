@@ -1,0 +1,2 @@
+Model,Accuracy,Precision,Recall,F1-Score,Train Time (s)
+MLP,0.9909,0.9831,0.9990,0.9910,56.62

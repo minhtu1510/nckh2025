@@ -1,0 +1,6 @@
+Model,Accuracy,Precision,Recall,F1-Score,File
+MLP,0.9883058032451396,0,0,0,mlp_metrics_mlp_classifier_cicids2017_latent_20251216_111841.csv
+LSVM,0.8495833942406081,0,0,0,lsvm_metrics_lsvm_cicids2017_latent_20251216_134700.csv
+KNN,0.992252594649905,0,0,0,knn_metrics_knn_cicids2017_20251216_111627.csv
+LDA,0.8685864639672563,0,0,0,lda_metrics_lda_cicids2017_20251216_111638.csv
+QSVM,0.927203625200994,0,0,0,qsvm_metrics_qsvm_cicids2017_20251216_111654.csv

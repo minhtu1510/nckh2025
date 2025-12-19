@@ -1,0 +1,9 @@
+{
+  "CNN": {
+    "accuracy": 0.5,
+    "precision": 0.5,
+    "recall": 1.0,
+    "f1_score": 0.6666666666666666,
+    "train_time": 65.14859771728516
+  }
+}
