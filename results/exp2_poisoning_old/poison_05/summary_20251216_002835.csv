@@ -1,2 +1,0 @@
-Model,Accuracy,Precision,Recall,F1-Score,Train Time (s)
-CNN,0.9890,0.9797,0.9988,0.9891,61.18
