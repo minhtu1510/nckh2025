@@ -1,0 +1,18 @@
+Model: "de_de_adapted"
+_________________________________________________________________
+ Layer (type)                Output Shape              Param #   
+=================================================================
+ feature_masker (FeatureMas  multiple                  0         
+ ker)                                                            
+                                                                 
+ tabular_encoder (TabularEn  multiple                  55744     
+ coder)                                                          
+                                                                 
+ tabular_decoder (TabularDe  multiple                  55730     
+ coder)                                                          
+                                                                 
+=================================================================
+Total params: 111474 (435.45 KB)
+Trainable params: 109938 (429.45 KB)
+Non-trainable params: 1536 (6.00 KB)
+_________________________________________________________________

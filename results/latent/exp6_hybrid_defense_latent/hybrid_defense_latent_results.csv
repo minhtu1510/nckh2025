@@ -1,0 +1,10 @@
+attack_type,accuracy,precision,recall,f1_score,stage1_pct,stage2_pct,asr,dede_detect_rate,false_positive_rate,note
+clean,0.9788,0.952534,0.98551,0.968742,1.0,99.0,,,,
+poison_05,0.97835,0.953658,0.98281,0.968015,1.0,99.0,,,,
+poison_10,0.97793,0.954555,0.98047,0.967339,1.0,99.0,,,,
+poison_15,0.97742,0.953399,0.98017,0.9666,1.0,99.0,,,,
+poison_50,0.96957,0.950772,0.958331,0.954537,1.0,99.0,,,,
+gan_attack,0.95054,0.948298,0.900732,0.923903,0.84,99.16,,,,
+trigger_05,0.99312,0.979778,1.0,0.989786,100.0,0.0,0.0,100.0,1.03,DeDe RAW for trigger (RAW trigger data)
+trigger_10,0.99312,0.979778,1.0,0.989786,100.0,0.0,0.0,100.0,1.03,DeDe RAW for trigger (RAW trigger data)
+trigger_15,0.99312,0.979778,1.0,0.989786,100.0,0.0,0.0,100.0,1.03,DeDe RAW for trigger (RAW trigger data)

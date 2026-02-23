@@ -1,0 +1,2 @@
+attack_type,accuracy,precision,recall,f1_score,stage1_rejections,stage2_classifications,stage1_percentage,stage2_percentage
+clean,0.977210227897721,0.9389895677249724,0.996370072598548,0.9668291972927735,5000,95001,4.999950000499995,95.0000499995

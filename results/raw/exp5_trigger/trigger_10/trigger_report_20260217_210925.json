@@ -1,0 +1,62 @@
+{
+  "experiment": "Exp5 - Trigger-based Backdoor Attack",
+  "timestamp": "20260217_210925",
+  "trigger_metadata": {
+    "trigger_rate": 10,
+    "trigger_size": 3,
+    "trigger_type": "fixed",
+    "trigger_value": 1.0,
+    "trigger_indices": [
+      13,
+      30,
+      39
+    ],
+    "n_backdoored_samples": 19999,
+    "n_total_samples": 299999,
+    "backdoor_percentage": 6.666355554518515,
+    "random_state": 42,
+    "created_at": "2026-02-17T20:58:40.374069"
+  },
+  "results": [
+    {
+      "model": "mlp",
+      "clean_accuracy": 0.9713302866971331,
+      "clean_precision": 0.9550981387984345,
+      "clean_recall": 0.9590808183836323,
+      "clean_f1": 0.9570853353690482,
+      "asr_total": 0.999990000099999,
+      "asr_benign": 0.9999850000749996,
+      "backdoor_effectiveness": 0.9713205734913982
+    },
+    {
+      "model": "svm",
+      "clean_accuracy": 0.8494915050849492,
+      "clean_precision": 0.7873510828906422,
+      "clean_recall": 0.75142497150057,
+      "clean_f1": 0.768968640152271,
+      "asr_total": 0.9976300236997631,
+      "asr_benign": 0.9965650171749141,
+      "backdoor_effectiveness": 0.8474782303506453
+    },
+    {
+      "model": "rf",
+      "clean_accuracy": 0.991610083899161,
+      "clean_precision": 0.9787265387901823,
+      "clean_recall": 0.996490070198596,
+      "clean_f1": 0.9875284289388016,
+      "asr_total": 1.0,
+      "asr_benign": 1.0,
+      "backdoor_effectiveness": 0.991610083899161
+    },
+    {
+      "model": "knn",
+      "clean_accuracy": 0.98360016399836,
+      "clean_precision": 0.9706563706563707,
+      "clean_recall": 0.9804403911921762,
+      "clean_f1": 0.9755238493224285,
+      "asr_total": 0.99990000099999,
+      "asr_benign": 0.9998500007499963,
+      "backdoor_effectiveness": 0.9835018049655505
+    }
+  ]
+}

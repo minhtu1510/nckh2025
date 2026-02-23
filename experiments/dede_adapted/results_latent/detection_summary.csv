@@ -1,0 +1,7 @@
+Metric,Value
+Accuracy,0.4988
+Precision,0.4874
+Recall (TPR),0.0475
+F1-Score,0.0866
+AUC,0.5201
+FPR,0.0500

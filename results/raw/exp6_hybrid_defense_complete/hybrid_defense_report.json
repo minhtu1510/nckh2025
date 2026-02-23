@@ -1,0 +1,108 @@
+{
+  "results": [
+    {
+      "attack_type": "clean",
+      "accuracy": 0.977210227897721,
+      "precision": 0.9391385502983681,
+      "recall": 0.996190076198476,
+      "f1_score": 0.9668234026756729,
+      "stage1_rejections": 5000,
+      "stage2_classifications": 95001,
+      "stage1_percentage": 4.999950000499995,
+      "stage2_percentage": 95.0000499995
+    },
+    {
+      "attack_type": "poison_05",
+      "accuracy": 0.977210227897721,
+      "precision": 0.9391385502983681,
+      "recall": 0.996190076198476,
+      "f1_score": 0.9668234026756729,
+      "stage1_rejections": 5000,
+      "stage2_classifications": 95001,
+      "stage1_percentage": 4.999950000499995,
+      "stage2_percentage": 95.0000499995
+    },
+    {
+      "attack_type": "poison_10",
+      "accuracy": 0.977210227897721,
+      "precision": 0.9391385502983681,
+      "recall": 0.996190076198476,
+      "f1_score": 0.9668234026756729,
+      "stage1_rejections": 5000,
+      "stage2_classifications": 95001,
+      "stage1_percentage": 4.999950000499995,
+      "stage2_percentage": 95.0000499995
+    },
+    {
+      "attack_type": "poison_15",
+      "accuracy": 0.977210227897721,
+      "precision": 0.9391385502983681,
+      "recall": 0.996190076198476,
+      "f1_score": 0.9668234026756729,
+      "stage1_rejections": 5000,
+      "stage2_classifications": 95001,
+      "stage1_percentage": 4.999950000499995,
+      "stage2_percentage": 95.0000499995
+    },
+    {
+      "attack_type": "poison_50",
+      "accuracy": 0.977210227897721,
+      "precision": 0.9391385502983681,
+      "recall": 0.996190076198476,
+      "f1_score": 0.9668234026756729,
+      "stage1_rejections": 5000,
+      "stage2_classifications": 95001,
+      "stage1_percentage": 4.999950000499995,
+      "stage2_percentage": 95.0000499995
+    },
+    {
+      "attack_type": "gan_attack",
+      "accuracy": 0.8873411265887341,
+      "precision": 0.9183983012285758,
+      "recall": 0.7265854682906342,
+      "f1_score": 0.8113087461896626,
+      "stage1_rejections": 2582,
+      "stage2_classifications": 97419,
+      "stage1_percentage": 2.5819741802581975,
+      "stage2_percentage": 97.4180258197418
+    },
+    {
+      "attack_type": "trigger_05",
+      "accuracy": 0.33333666663333367,
+      "precision": 0.33333666663333367,
+      "recall": 1.0,
+      "f1_score": 0.5000037499531256,
+      "stage1_rejections": 100001,
+      "stage2_classifications": 0,
+      "stage1_percentage": 100.0,
+      "stage2_percentage": 0.0
+    },
+    {
+      "attack_type": "trigger_10",
+      "accuracy": 0.33333666663333367,
+      "precision": 0.33333666663333367,
+      "recall": 1.0,
+      "f1_score": 0.5000037499531256,
+      "stage1_rejections": 100001,
+      "stage2_classifications": 0,
+      "stage1_percentage": 100.0,
+      "stage2_percentage": 0.0
+    },
+    {
+      "attack_type": "trigger_15",
+      "accuracy": 0.33333666663333367,
+      "precision": 0.33333666663333367,
+      "recall": 1.0,
+      "f1_score": 0.5000037499531256,
+      "stage1_rejections": 100001,
+      "stage2_classifications": 0,
+      "stage1_percentage": 100.0,
+      "stage2_percentage": 0.0
+    }
+  ],
+  "config": {
+    "trigger_threshold": 0.0073938192799687386,
+    "trigger_percentile": 95
+  },
+  "timestamp": "2026-02-23T08:19:32.601499"
+}

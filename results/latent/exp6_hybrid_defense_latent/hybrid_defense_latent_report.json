@@ -1,0 +1,111 @@
+{
+  "results": [
+    {
+      "attack_type": "clean",
+      "accuracy": 0.9788,
+      "precision": 0.952534,
+      "recall": 0.98551,
+      "f1_score": 0.968742,
+      "stage1_pct": 1.0,
+      "stage2_pct": 99.0,
+      "asr": null
+    },
+    {
+      "attack_type": "poison_05",
+      "accuracy": 0.97835,
+      "precision": 0.953658,
+      "recall": 0.98281,
+      "f1_score": 0.968015,
+      "stage1_pct": 1.0,
+      "stage2_pct": 99.0,
+      "asr": null
+    },
+    {
+      "attack_type": "poison_10",
+      "accuracy": 0.97793,
+      "precision": 0.954555,
+      "recall": 0.98047,
+      "f1_score": 0.967339,
+      "stage1_pct": 1.0,
+      "stage2_pct": 99.0,
+      "asr": null
+    },
+    {
+      "attack_type": "poison_15",
+      "accuracy": 0.97742,
+      "precision": 0.953399,
+      "recall": 0.98017,
+      "f1_score": 0.9666,
+      "stage1_pct": 1.0,
+      "stage2_pct": 99.0,
+      "asr": null
+    },
+    {
+      "attack_type": "poison_50",
+      "accuracy": 0.96957,
+      "precision": 0.950772,
+      "recall": 0.958331,
+      "f1_score": 0.954537,
+      "stage1_pct": 1.0,
+      "stage2_pct": 99.0,
+      "asr": null
+    },
+    {
+      "attack_type": "gan_attack",
+      "accuracy": 0.95054,
+      "precision": 0.948298,
+      "recall": 0.900732,
+      "f1_score": 0.923903,
+      "stage1_pct": 0.84,
+      "stage2_pct": 99.16,
+      "asr": null
+    },
+    {
+      "attack_type": "trigger_05",
+      "accuracy": 0.99312,
+      "precision": 0.979778,
+      "recall": 1.0,
+      "f1_score": 0.989786,
+      "asr": 0.0,
+      "dede_detect_rate": 100.0,
+      "false_positive_rate": 1.03,
+      "stage1_pct": 100.0,
+      "stage2_pct": 0.0,
+      "note": "DeDe RAW for trigger (RAW trigger data)"
+    },
+    {
+      "attack_type": "trigger_10",
+      "accuracy": 0.99312,
+      "precision": 0.979778,
+      "recall": 1.0,
+      "f1_score": 0.989786,
+      "asr": 0.0,
+      "dede_detect_rate": 100.0,
+      "false_positive_rate": 1.03,
+      "stage1_pct": 100.0,
+      "stage2_pct": 0.0,
+      "note": "DeDe RAW for trigger (RAW trigger data)"
+    },
+    {
+      "attack_type": "trigger_15",
+      "accuracy": 0.99312,
+      "precision": 0.979778,
+      "recall": 1.0,
+      "f1_score": 0.989786,
+      "asr": 0.0,
+      "dede_detect_rate": 100.0,
+      "false_positive_rate": 1.03,
+      "stage1_pct": 100.0,
+      "stage2_pct": 0.0,
+      "note": "DeDe RAW for trigger (RAW trigger data)"
+    }
+  ],
+  "config": {
+    "input_dim": 64,
+    "threshold": 0.08190464973449707,
+    "threshold_pct": 99,
+    "dede_latent_model": "experiments/dede_adapted/models_latent",
+    "trigger_note": "DeDe RAW used for trigger (trigger data is on RAW features)"
+  },
+  "timestamp": "2026-02-23T21:25:31.704288"
+}

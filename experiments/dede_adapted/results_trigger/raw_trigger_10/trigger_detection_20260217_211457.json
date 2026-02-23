@@ -1,0 +1,49 @@
+{
+  "trigger_metadata": {
+    "trigger_rate": 10,
+    "trigger_size": 3,
+    "trigger_type": "fixed",
+    "trigger_value": 1.0,
+    "trigger_indices": [
+      13,
+      30,
+      39
+    ],
+    "n_backdoored_samples": 19999,
+    "n_total_samples": 299999,
+    "backdoor_percentage": 6.666355554518515,
+    "random_state": 42,
+    "created_at": "2026-02-17T20:58:40.374069"
+  },
+  "threshold": 0.0073938192799687386,
+  "threshold_percentile": 95,
+  "error_statistics": {
+    "clean": {
+      "mean": 0.0022203826811164618,
+      "std": 0.02171279676258564,
+      "median": 0.0004632404015865177,
+      "min": 2.4760596716077998e-05,
+      "max": 0.8580235838890076
+    },
+    "triggered": {
+      "mean": 0.09460850805044174,
+      "std": 0.03712078928947449,
+      "median": 0.11138083785772324,
+      "min": 0.0204633641988039,
+      "max": 0.9743449687957764
+    },
+    "increase": {
+      "absolute": 0.09238812327384949,
+      "relative_pct": 4160.9100341796875
+    }
+  },
+  "detection_performance": {
+    "accuracy": 0.9750002499975,
+    "precision": 0.9523814058913724,
+    "recall": 1.0,
+    "f1_score": 0.9756099940488385,
+    "auc": 0.9984651386473805,
+    "fpr": 0.04999950000499995,
+    "tpr": 1.0
+  }
+}

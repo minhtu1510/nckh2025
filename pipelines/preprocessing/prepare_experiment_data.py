@@ -15,33 +15,48 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.feature_selection import SelectKBest, f_classif
 
-BASE_DIR = Path(__file__).resolve().parent
+# Go up to ids_research root (2 levels up from preprocessing)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 RAW_DIR = BASE_DIR / "datasets" / "raw"
 PROCESSED_DIR = BASE_DIR / "datasets" / "processed"
-SPLITS_DIR = BASE_DIR / "datasets" / "splits"
+SPLITS_DIR = BASE_DIR / "datasets" / "splits" / "2.1"
 SPLITS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Constants
-N_BENIGN = 200_000
-N_MALICIOUS = 200_000
-N_TRAIN = 150_000
-N_TEST = 50_000
+# Constants - FLEXIBLE RATIOS
+TOTAL_SAMPLES = 400_000  # Total samples to collect
+BENIGN_RATIO = 2/3  # Ratio of benign samples (0.5 = 50%, 0.7 = 70%, etc.)
+TRAIN_RATIO = 0.75  # Ratio for train split (0.75 = 75% train, 25% test)
+
+N_BENIGN = int(TOTAL_SAMPLES * BENIGN_RATIO)
+N_MALICIOUS = TOTAL_SAMPLES - N_BENIGN
+N_TRAIN = int(TOTAL_SAMPLES * BENIGN_RATIO * TRAIN_RATIO)
+N_TEST = N_BENIGN - N_TRAIN
+N_TRAIN_MAL = int(N_MALICIOUS * TRAIN_RATIO)
+N_TEST_MAL = N_MALICIOUS - N_TRAIN_MAL
+
 RANDOM_STATE = 42
 CHUNK_SIZE = 50_000
+
+# Feature selection (set to None to disable, or number of features to keep)
+N_FEATURES_SELECT = None  # e.g., 50 to keep top 50 features
 
 np.random.seed(RANDOM_STATE)
 
 
 def find_raw_file():
     """Tìm file CIC-ToN-IoT."""
+    # User prefers CSV
     candidates = [
         RAW_DIR / "CIC-ToN-IoT.csv",
         RAW_DIR / "CIC-ToN-IoT-V2.parquet",
+        RAW_DIR / "CIC-ToN-IoT.parquet",
     ]
     
     for candidate in candidates:
         if candidate.exists():
+            print(f"  Using: {candidate.name}")
             return candidate
     
     raise FileNotFoundError(
@@ -74,11 +89,19 @@ def reservoir_sample_toniot():
     # Read file
     if raw_file.suffix == '.parquet':
         print("  Reading parquet...")
-        df = pd.read_parquet(raw_file)
-        chunks = [df]
+        try:
+            df = pd.read_parquet(raw_file)
+            chunks = [df]
+        except ImportError:
+            print("  ❌ pyarrow not installed. Please install: pip install pyarrow")
+            raise
     else:
         print("  Reading CSV in chunks...")
-        chunks = pd.read_csv(raw_file, chunksize=CHUNK_SIZE, low_memory=False)
+        try:
+            chunks = pd.read_csv(raw_file, chunksize=CHUNK_SIZE, low_memory=False)
+        except Exception as e:
+            print(f"  ⚠️  C parser failed, trying Python engine (slower)...")
+            chunks = pd.read_csv(raw_file, chunksize=CHUNK_SIZE, low_memory=False, engine='python')
     
     for chunk in chunks:
         chunk_num += 1
@@ -140,10 +163,18 @@ def reservoir_sample_toniot():
     
     # Re-read
     if raw_file.suffix == '.parquet':
-        df = pd.read_parquet(raw_file)
-        chunks = [df]
+        try:
+            df = pd.read_parquet(raw_file)
+            chunks = [df]
+        except ImportError:
+            print("  ❌ pyarrow not installed. Please install: pip install pyarrow")
+            raise
     else:
-        chunks = pd.read_csv(raw_file, chunksize=CHUNK_SIZE, low_memory=False)
+        try:
+            chunks = pd.read_csv(raw_file, chunksize=CHUNK_SIZE, low_memory=False)
+        except Exception as e:
+            print(f"  ⚠️  C parser failed, trying Python engine (slower)...")
+            chunks = pd.read_csv(raw_file, chunksize=CHUNK_SIZE, low_memory=False, engine='python')
     
     for chunk in chunks:
         chunk_num += 1
@@ -232,6 +263,25 @@ def preprocess_and_split():
     print(f"  Benign: {len(benign_df):,}")
     print(f"  Malicious: {len(malicious_df):,}")
     
+    # ========================================================================
+    # STEP 2.5: REMOVE BIASED/SUBJECTIVE FEATURES
+    # ========================================================================
+    print("\n[STEP 2.5] Removing biased/subjective features...")
+    
+    # Features to exclude (case-insensitive matching)
+    EXCLUDE_FEATURES = [
+        'flow id', 'flow_id', 'flowid',
+        'src ip', 'src_ip', 'srcip', 'source ip', 'source_ip',
+        'dst ip', 'dst_ip', 'dstip', 'destination ip', 'destination_ip',
+        'src port', 'src_port', 'srcport', 'source port', 'source_port',
+        'dst port', 'dst_port', 'dstport', 'destination port', 'destination_port',
+        'timestamp', 'time', 'datetime',
+        'protocol',  # Can be kept as one-hot encoded, but raw protocol ID is biased
+        'attack',  # Attack type (we only need binary label)
+    ]
+    
+    print(f"  Features to exclude: {len(EXCLUDE_FEATURES)}")
+    
     # Basic preprocessing
     print("\n[STEP 2] Preprocessing...")
     
@@ -244,7 +294,21 @@ def preprocess_and_split():
     if 'label' in common_cols:
         common_cols.remove('label')
     
-    print(f"  Common features: {len(common_cols)}")
+    # Remove biased features
+    common_cols_filtered = []
+    excluded_count = 0
+    for col in common_cols:
+        col_lower = col.lower().strip()
+        if col_lower not in EXCLUDE_FEATURES:
+            common_cols_filtered.append(col)
+        else:
+            excluded_count += 1
+    
+    common_cols = common_cols_filtered
+    
+    print(f"  Original common features: {len(numeric_cols_benign)}")
+    print(f"  After removing biased features: {len(common_cols)} (excluded: {excluded_count})")
+
     
     # Extract features
     benign_features = benign_df[common_cols].copy()
@@ -254,28 +318,19 @@ def preprocess_and_split():
     benign_features = benign_features.replace([np.inf, -np.inf], np.nan).fillna(0)
     malicious_features = malicious_features.replace([np.inf, -np.inf], np.nan).fillna(0)
     
-    # Scale
-    print("  Scaling features...")
-    scaler = MinMaxScaler()
-    
-    # Fit on combined data
-    combined_features = pd.concat([benign_features, malicious_features], ignore_index=True)
-    scaler.fit(combined_features)
-    
-    benign_scaled = scaler.transform(benign_features)
-    malicious_scaled = scaler.transform(malicious_features)
-    
-    # Create final arrays
-    X_benign = benign_scaled
+    # Convert to numpy arrays
+    X_benign = benign_features.values
     y_benign = np.zeros(len(X_benign))
     
-    X_malicious = malicious_scaled
+    X_malicious = malicious_features.values
     y_malicious = np.ones(len(X_malicious))
     
-    print(f"  Final shapes: X_benign={X_benign.shape}, X_malicious={X_malicious.shape}")
+    print(f"  Feature shapes: X_benign={X_benign.shape}, X_malicious={X_malicious.shape}")
     
-    # Split train/test
-    print(f"\n[STEP 3] Splitting train/test...")
+    # ========================================================================
+    # STEP 3: SPLIT FIRST (before scaling to prevent data leakage!)
+    # ========================================================================
+    print(f"\n[STEP 3] Splitting train/test BEFORE scaling...")
     
     benign_train_X, benign_test_X, benign_train_y, benign_test_y = train_test_split(
         X_benign, y_benign,
@@ -286,16 +341,75 @@ def preprocess_and_split():
     
     malicious_train_X, malicious_test_X, malicious_train_y, malicious_test_y = train_test_split(
         X_malicious, y_malicious,
-        train_size=N_TRAIN,
-        test_size=N_TEST,
+        train_size=N_TRAIN_MAL,
+        test_size=N_TEST_MAL,
         random_state=RANDOM_STATE
     )
     
     print(f"  Benign: {len(benign_train_X):,} train + {len(benign_test_X):,} test")
-    print(f"  Malicious: {len( malicious_train_X):,} train + {len(malicious_test_X):,} test")
+    print(f"  Malicious: {len(malicious_train_X):,} train + {len(malicious_test_X):,} test")
     
-    # Save base splits
-    print(f"\n[STEP 4] Saving base splits...")
+    # ========================================================================
+    # STEP 4: FIT SCALER ONLY ON TRAIN SET (Fix data leakage!)
+    # ========================================================================
+    print(f"\n[STEP 4] Scaling - FIT ONLY ON TRAIN SET...")
+    
+    scaler = MinMaxScaler()
+    
+    # Combine train data for fitting
+    X_train_combined = np.vstack([benign_train_X, malicious_train_X])
+    
+    # FIT scaler on TRAIN ONLY
+    scaler.fit(X_train_combined)
+    print(f"  ✓ Scaler fitted on {len(X_train_combined):,} train samples")
+    
+    # Transform all splits
+    benign_train_X_scaled = scaler.transform(benign_train_X)
+    benign_test_X_scaled = scaler.transform(benign_test_X)
+    malicious_train_X_scaled = scaler.transform(malicious_train_X)
+    malicious_test_X_scaled = scaler.transform(malicious_test_X)
+    
+    print(f"  ✓ Transformed train and test sets")
+    
+    # ========================================================================
+    # STEP 5: FEATURE SELECTION (Optional, fit only on train!)
+    # ========================================================================
+    if N_FEATURES_SELECT is not None and N_FEATURES_SELECT < benign_train_X_scaled.shape[1]:
+        print(f"\n[STEP 5] Feature Selection - FIT ONLY ON TRAIN SET...")
+        print(f"  Selecting top {N_FEATURES_SELECT} features from {benign_train_X_scaled.shape[1]}")
+        
+        selector = SelectKBest(f_classif, k=N_FEATURES_SELECT)
+        
+        # ✅ FIX: Combine SCALED train data (not raw!)
+        X_train_combined_scaled = np.vstack([benign_train_X_scaled, malicious_train_X_scaled])
+        y_train_combined = np.hstack([benign_train_y, malicious_train_y])
+        
+        # FIT selector on SCALED TRAIN data
+        selector.fit(X_train_combined_scaled, y_train_combined)
+        print(f"  ✓ Selector fitted on SCALED train set")
+        
+        # Transform all splits
+        benign_train_X_scaled = selector.transform(benign_train_X_scaled)
+        benign_test_X_scaled = selector.transform(benign_test_X_scaled)
+        malicious_train_X_scaled = selector.transform(malicious_train_X_scaled)
+        malicious_test_X_scaled = selector.transform(malicious_test_X_scaled)
+        
+        print(f"  ✓ Selected features: {benign_train_X_scaled.shape[1]}")
+    else:
+        print(f"\n[STEP 5] Feature Selection - SKIPPED (N_FEATURES_SELECT={N_FEATURES_SELECT})")
+    
+    # Update variables with scaled data
+    benign_train_X = benign_train_X_scaled
+    benign_test_X = benign_test_X_scaled
+    malicious_train_X = malicious_train_X_scaled
+    malicious_test_X = malicious_test_X_scaled
+    
+    print(f"  Final shapes: X_train={benign_train_X.shape}, X_test={benign_test_X.shape}")
+    
+    # ========================================================================
+    # STEP 6: SAVE BASE SPLITS
+    # ========================================================================
+    print(f"\n[STEP 6] Saving base splits...")
     
     np.save(SPLITS_DIR / 'benign_train_X.npy', benign_train_X)
     np.save(SPLITS_DIR / 'benign_train_y.npy', benign_train_y)
@@ -310,16 +424,17 @@ def preprocess_and_split():
     print(f"  ✓ Saved base splits to {SPLITS_DIR}/")
     
     # Create Exp1 data
-    print(f"\n[STEP 5] Creating Exp1 (Baseline) data...")
+    print(f"\n[STEP 7] Creating Exp1 (Baseline) data...")
     
     X_train = np.vstack([benign_train_X, malicious_train_X])
     y_train = np.hstack([benign_train_y, malicious_train_y])
     X_test = np.vstack([benign_test_X, malicious_test_X])
     y_test = np.hstack([benign_test_y, malicious_test_y])
     
-    # Shuffle
-    train_idx = np.random.permutation(len(X_train))
-    test_idx = np.random.permutation(len(X_test))
+    # ✅ FIX: Shuffle with explicit seed for reproducibility
+    rng_shuffle = np.random.RandomState(RANDOM_STATE)
+    train_idx = rng_shuffle.permutation(len(X_train))
+    test_idx = rng_shuffle.permutation(len(X_test))
     
     X_train = X_train[train_idx]
     y_train = y_train[train_idx]
@@ -337,7 +452,7 @@ def preprocess_and_split():
     print(f"  ✓ Exp1 data: Train={X_train.shape}, Test={X_test.shape}")
     
     # Create Exp2 data (poisoned)
-    print(f"\n[STEP 6] Creating Exp2 (Poisoning) data...")
+    print(f"\n[STEP 8] Creating Exp2 (Poisoning) data...")
     
     exp2_dir = SPLITS_DIR / 'exp2_poisoning'
     exp2_dir.mkdir(exist_ok=True)
@@ -351,30 +466,55 @@ def preprocess_and_split():
         rate_dir = exp2_dir / f"poison_{rate_str}"
         rate_dir.mkdir(exist_ok=True)
         
-        # Flip labels
+        # ✅ FIX: Use dedicated RNG for each poison rate (reproducible!)
+        # Different seed for each rate to ensure independence
+        poison_seed = RANDOM_STATE + int(poison_rate * 1000)
+        rng_poison = np.random.RandomState(poison_seed)
+        
+        # ✅ ONLY FLIP MALICIOUS → BENIGN (not both ways!)
         y_train_poisoned = y_train.copy()
-        n_poison = int(len(y_train_poisoned) * poison_rate)
-        poison_indices = np.random.choice(len(y_train_poisoned), n_poison, replace=False)
-        y_train_poisoned[poison_indices] = 1 - y_train_poisoned[poison_indices]
+        
+        # Find indices of MALICIOUS samples only (y == 1)
+        malicious_indices = np.where(y_train == 1)[0]
+        n_malicious = len(malicious_indices)
+        
+        # Calculate number to poison based on malicious count
+        n_poison = int(n_malicious * poison_rate)
+        
+        # Randomly select malicious samples to flip
+        poison_indices = rng_poison.choice(malicious_indices, n_poison, replace=False)
+        
+        # Flip ONLY malicious → benign (1 → 0)
+        y_train_poisoned[poison_indices] = 0
         
         np.save(rate_dir / 'X_train.npy', X_train)
         np.save(rate_dir / 'y_train.npy', y_train_poisoned)
         np.save(rate_dir / 'X_test.npy', X_test)
         np.save(rate_dir / 'y_test.npy', y_test)
         
-        print(f"  ✓ Poison {rate_str}%: Flipped {n_poison:,} labels")
+        print(f"  ✓ Poison {rate_str}%: Flipped {n_poison:,}/{n_malicious:,} malicious→benign (seed={poison_seed})")
     
     # Save metadata
-    print(f"\n[STEP 7] Saving metadata...")
+    print(f"\n[STEP 9] Saving metadata...")
     
     metadata = {
         'dataset': 'CIC-ToN-IoT',
+        'total_samples': TOTAL_SAMPLES,
+        'benign_ratio': BENIGN_RATIO,
+        'malicious_ratio': 1 - BENIGN_RATIO,
+        'train_ratio': TRAIN_RATIO,
         'n_benign_total': N_BENIGN,
         'n_malicious_total': N_MALICIOUS,
-        'n_train_per_class': N_TRAIN,
-        'n_test_per_class': N_TEST,
+        'n_train_benign': N_TRAIN,
+        'n_test_benign': N_TEST,
+        'n_train_malicious': N_TRAIN_MAL,
+        'n_test_malicious': N_TEST_MAL,
         'random_state': RANDOM_STATE,
         'feature_dim': X_train.shape[1],
+        'n_features_selected': N_FEATURES_SELECT,
+        'data_leakage_fixed': True,
+        'scaler_fit_on': 'train_only',
+        'feature_selection_fit_on': 'train_only',
         'created_at': str(pd.Timestamp.now()),
     }
     
@@ -389,9 +529,13 @@ def preprocess_and_split():
     print("="*80)
     print(f"\n📊 TỔNG KẾT:")
     print(f"  • Dataset: CIC-ToN-IoT")
-    print(f"  • Benign: {N_BENIGN:,} ({N_TRAIN:,} train + {N_TEST:,} test)")
-    print(f"  • Malicious: {N_MALICIOUS:,} ({N_TRAIN:,} train + {N_TEST:,} test)")
+    print(f"  • Total: {TOTAL_SAMPLES:,} samples")
+    print(f"  • Benign: {N_BENIGN:,} ({BENIGN_RATIO*100:.0f}%) - {N_TRAIN:,} train + {N_TEST:,} test")
+    print(f"  • Malicious: {N_MALICIOUS:,} ({(1-BENIGN_RATIO)*100:.0f}%) - {N_TRAIN_MAL:,} train + {N_TEST_MAL:,} test")
     print(f"  • Features: {X_train.shape[1]}")
+    if N_FEATURES_SELECT is not None:
+        print(f"  • Feature Selection: {N_FEATURES_SELECT} features selected")
+    print(f"  • ✅ NO DATA LEAKAGE: Scaler & Feature Selection fit on train only")
     print(f"\n💾 Files tại: {SPLITS_DIR}/")
     print(f"  ✓ exp1_baseline/")
     print(f"  ✓ exp2_poisoning/poison_05/, 10/, 15/")
