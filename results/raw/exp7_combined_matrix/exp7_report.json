@@ -1,0 +1,171 @@
+{
+  "config": {
+    "dede_threshold": 0.013118574395775795,
+    "threshold_percentile": 99,
+    "trigger_rate_tested": "10",
+    "ensemble_type": "GAN-Optimized (MLP_deep+MLP_wide+KNN_5+KNN_11)",
+    "fixed_test_sets": [
+      "clean",
+      "gan_attack",
+      "trigger_10"
+    ]
+  },
+  "results": [
+    {
+      "train_scenario": "clean",
+      "test_type": "clean",
+      "accuracy": 0.9779,
+      "precision": 0.951439,
+      "recall": 0.98392,
+      "f1_score": 0.967407,
+      "stage1_pct": 1.0,
+      "asr": null
+    },
+    {
+      "train_scenario": "clean",
+      "test_type": "gan_attack",
+      "accuracy": 0.945721,
+      "precision": 0.946439,
+      "recall": 0.887382,
+      "f1_score": 0.91596,
+      "stage1_pct": 0.95,
+      "asr": null
+    },
+    {
+      "train_scenario": "clean",
+      "test_type": "trigger_10",
+      "accuracy": 0.98326,
+      "precision": 0.952182,
+      "recall": 1.0,
+      "f1_score": 0.975506,
+      "stage1_pct": 100.0,
+      "asr": 0.0,
+      "false_positive_rate": 1.03
+    },
+    {
+      "train_scenario": "poison_05",
+      "test_type": "clean",
+      "accuracy": 0.97634,
+      "precision": 0.952035,
+      "recall": 0.97831,
+      "f1_score": 0.964994,
+      "stage1_pct": 1.0,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_05",
+      "test_type": "gan_attack",
+      "accuracy": 0.945701,
+      "precision": 0.947323,
+      "recall": 0.886392,
+      "f1_score": 0.915845,
+      "stage1_pct": 0.95,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_05",
+      "test_type": "trigger_10",
+      "accuracy": 0.98357,
+      "precision": 0.953026,
+      "recall": 1.0,
+      "f1_score": 0.975948,
+      "stage1_pct": 100.0,
+      "asr": 0.0,
+      "false_positive_rate": 1.03
+    },
+    {
+      "train_scenario": "poison_10",
+      "test_type": "clean",
+      "accuracy": 0.97418,
+      "precision": 0.951677,
+      "recall": 0.971891,
+      "f1_score": 0.961678,
+      "stage1_pct": 1.0,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_10",
+      "test_type": "gan_attack",
+      "accuracy": 0.945201,
+      "precision": 0.947181,
+      "recall": 0.884952,
+      "f1_score": 0.91501,
+      "stage1_pct": 0.95,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_10",
+      "test_type": "trigger_10",
+      "accuracy": 0.98355,
+      "precision": 0.952972,
+      "recall": 1.0,
+      "f1_score": 0.97592,
+      "stage1_pct": 100.0,
+      "asr": 0.0,
+      "false_positive_rate": 1.03
+    },
+    {
+      "train_scenario": "poison_15",
+      "test_type": "clean",
+      "accuracy": 0.97285,
+      "precision": 0.951381,
+      "recall": 0.968021,
+      "f1_score": 0.959629,
+      "stage1_pct": 1.0,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_15",
+      "test_type": "gan_attack",
+      "accuracy": 0.945321,
+      "precision": 0.947086,
+      "recall": 0.885432,
+      "f1_score": 0.915222,
+      "stage1_pct": 0.95,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_15",
+      "test_type": "trigger_10",
+      "accuracy": 0.98351,
+      "precision": 0.952863,
+      "recall": 1.0,
+      "f1_score": 0.975863,
+      "stage1_pct": 100.0,
+      "asr": 0.0,
+      "false_positive_rate": 1.03
+    },
+    {
+      "train_scenario": "poison_50",
+      "test_type": "clean",
+      "accuracy": 0.95325,
+      "precision": 0.92804,
+      "recall": 0.932021,
+      "f1_score": 0.930026,
+      "stage1_pct": 1.0,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_50",
+      "test_type": "gan_attack",
+      "accuracy": 0.933361,
+      "precision": 0.923495,
+      "recall": 0.872353,
+      "f1_score": 0.897195,
+      "stage1_pct": 0.95,
+      "asr": null
+    },
+    {
+      "train_scenario": "poison_50",
+      "test_type": "trigger_10",
+      "accuracy": 0.97591,
+      "precision": 0.932602,
+      "recall": 1.0,
+      "f1_score": 0.965126,
+      "stage1_pct": 100.0,
+      "asr": 0.0,
+      "false_positive_rate": 1.03
+    }
+  ],
+  "timestamp": "2026-02-25T00:08:01.371558"
+}
