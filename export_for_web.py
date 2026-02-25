@@ -99,17 +99,28 @@ def main():
         shutil.copy(SRC_ENC / fname, pre_out / fname)
     print(f'  ✓ {pre_out}')
 
-    # ── 7. config.json ──────────────────────────────────────────────────────
     print('\n[7] config.json...')
+    # Load feature names từ preprocessing_info
+    pre_info_path = SRC_ENC / 'preprocessing_info.json'
+    feature_names = None
+    if pre_info_path.exists():
+        with open(pre_info_path) as f:
+            pre_info = json.load(f)
+        feature_names = pre_info.get('common_features', None)
+        print(f'  ✓ feature_names: {len(feature_names)} features loaded')
+    else:
+        print('  ⚠️  preprocessing_info.json not found, feature alignment by name disabled')
+
     cfg = {
-        'low_thr':   low_thr,
-        'high_thr':  high_thr,
-        'input_dim': dede_cfg['input_dim'],
-        'created':   datetime.now().isoformat(),
+        'low_thr':      low_thr,
+        'high_thr':     high_thr,
+        'input_dim':    dede_cfg['input_dim'],
+        'feature_names': feature_names,   # 76 tên features theo đúng thứ tự
+        'created':      datetime.now().isoformat(),
         'routing': {
-            f'error < {low_thr:.4f}':              'Standard Stacking',
+            f'error < {low_thr:.4f}':               'Standard Stacking',
             f'{low_thr:.4f} <= error < {high_thr:.4f}': 'GAN-Opt Stacking',
-            f'error >= {high_thr:.4f}':            'BLOCKED (trigger)',
+            f'error >= {high_thr:.4f}':             'BLOCKED (trigger)',
         },
         'performance_clean_model': {
             'clean_f1': 0.9772, 'gan_f1': 0.9241,
@@ -119,6 +130,7 @@ def main():
     with open(OUT / 'config.json', 'w') as f:
         json.dump(cfg, f, indent=2)
     print(f'  ✓ {OUT}/config.json')
+
 
     # ── 8. Inference class ──────────────────────────────────────────────────
     print('\n[8] inference_exp9.py...')

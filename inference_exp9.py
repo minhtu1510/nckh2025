@@ -29,9 +29,15 @@ class Exp9IDS:
         with open(d / "config.json") as f:
             cfg = json.load(f)
 
-        self.low_thr  = cfg["low_thr"]
-        self.high_thr = cfg["high_thr"]
-        input_dim     = cfg["input_dim"]
+        self.low_thr       = cfg["low_thr"]
+        self.high_thr      = cfg["high_thr"]
+        self.feature_names = cfg.get("feature_names", None)  # 76 ten features
+        # Tao normalized map: "bwd_iat_max" -> "bwd iat max"
+        self._feat_norm_map = {}  # normalized_key -> original_name
+        if self.feature_names:
+            for fn in self.feature_names:
+                self._feat_norm_map[self._norm(fn)] = fn
+        input_dim          = cfg["input_dim"]
 
         # Preprocessing
         pre = d / "preprocessing"
@@ -103,6 +109,48 @@ class Exp9IDS:
 
     def predict_single(self, raw_features) -> dict:
         return self.predict(np.array(raw_features).reshape(1, -1))[0]
+
+    @staticmethod
+    def _norm(name: str) -> str:
+        """Normalize feature name: strip, lowercase, underscore=space.
+        'Bwd IAT Max' -> 'bwd iat max'
+        'bwd_iat_max' -> 'bwd iat max'
+        ' Flow Duration' -> 'flow duration'
+        """
+        return name.strip().lower().replace('_', ' ')
+
+    def _align_record(self, record: dict) -> list:
+        """Map 1 dict (bat ky ten) -> list 76 gia tri theo dung thu tu model."""
+        if self.feature_names is None:
+            raise ValueError("feature_names not in config. Re-run export_for_web.py.")
+        # Tao normalized dict tu input
+        norm_record = {self._norm(k): v for k, v in record.items()}
+        result = []
+        missing = []
+        for fn in self.feature_names:
+            norm = self._norm(fn)
+            if norm in norm_record:
+                result.append(float(norm_record[norm]))
+            else:
+                result.append(0.0)
+                missing.append(fn)
+        if missing:
+            print(f"  [WARN] {len(missing)} features missing, filled 0: {missing[:3]}")
+        return result
+
+    def predict_dict(self, records: list) -> list:
+        """
+        Input: list of dict co the co:
+          - Ten khac nhau: 'Bwd IAT Max' / 'bwd_iat_max' / 'bwd iat max'
+          - Nhieu truong hon 76: cac truong thua tu dong bi bo qua
+          - Thieu truong: fill = 0.0
+        """
+        rows = [self._align_record(r) for r in records]
+        return self.predict(np.array(rows))
+
+    def predict_single_dict(self, record: dict) -> dict:
+        """Nhan 1 dict bat ky, tu dong align feature names."""
+        return self.predict_dict([record])[0]
 
 
 if __name__ == "__main__":
