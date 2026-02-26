@@ -101,6 +101,8 @@ models/
 !models/
 !models/deploy_exp9/
 !models/deploy_exp9/*
+!models/ensemble/
+!models/ensemble/*
 
 # Documentation
 !HUONG_DAN*.md
