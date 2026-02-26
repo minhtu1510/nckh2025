@@ -102,6 +102,9 @@ models/*
 !*.yaml
 !*.yml
 !configs/*.json
+models/
+!models/
+!models/deploy_exp9/
 !models/deploy_exp9/*
 
 # Documentation
