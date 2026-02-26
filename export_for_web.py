@@ -39,17 +39,11 @@ def main():
     SRC_STD     = BASE_DIR / 'results/latent/exp5b_stacking_vs_gan/lat_standard_clean'
     RAW_DIR     = BASE_DIR / 'datasets/splits/3.0_raw_from_latent'
 
-    # ── 1. Copy DeDe weights ────────────────────────────────────────────────
-    print('\n[1] DeDe RAW...')
+    # ── 1. Save DeDe as full Keras SavedModel (khong can build_dede_model khi inference)
+    print('\n[1] DeDe RAW → SavedModel...')
     dede_out = OUT / 'dede'
     dede_out.mkdir(exist_ok=True)
-    shutil.copy(SRC_DEDE / 'best_model.weights.h5',  dede_out / 'dede.weights.h5')
-    shutil.copy(SRC_DEDE / 'training_config.json',    dede_out / 'config.json')
-    print(f'  ✓ {dede_out}')
-
-    # ── 2. Load DeDe + tính ngưỡng ─────────────────────────────────────────
-    print('\n[2] Calibrate thresholds...')
-    with open(dede_out / 'config.json') as f:
+    with open(SRC_DEDE / 'training_config.json') as f:
         dede_cfg = json.load(f)
     dede = build_dede_model(
         input_dim=dede_cfg['input_dim'], latent_dim=dede_cfg.get('latent_dim', 64),
@@ -58,8 +52,18 @@ def main():
         learning_rate=dede_cfg.get('learning_rate', 0.001)
     )
     _ = dede(tf.zeros((1, dede_cfg['input_dim'])), training=False)
-    dede.load_weights(str(dede_out / 'dede.weights.h5'))
+    dede.load_weights(str(SRC_DEDE / 'best_model.weights.h5'))
 
+    # Save as full Keras model (khong can code DeDe khi load)
+    dede_saved = str(dede_out / 'dede_model.keras')
+    tf.keras.models.save_model(dede, dede_saved)
+    # Also save config
+    with open(dede_out / 'config.json', 'w') as f:
+        json.dump(dede_cfg, f, indent=2)
+    print(f'  ✓ {dede_out}/dede_model.keras')
+
+    # ── 2. Calibrate thresholds ────────────────────────────────────────────────
+    print('\n[2] Calibrate thresholds...')
     X_clean  = np.load(RAW_DIR / 'exp1_baseline/X_test.npy')
     errs     = dede.get_reconstruction_error(X_clean)
     low_thr  = float(np.percentile(errs, 75))
