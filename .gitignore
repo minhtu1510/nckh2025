@@ -102,6 +102,7 @@ models/*
 !*.yaml
 !*.yml
 !configs/*.json
+!models/deploy_exp9/*
 
 # Documentation
 !HUONG_DAN*.md
