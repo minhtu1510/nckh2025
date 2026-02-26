@@ -45,12 +45,7 @@ datasets/splits/**/*.csv
 
 # ===== MODEL FILES (LARGE) =====
 # Trained models
-models/**/*.h5
-models/**/*.pkl
-models/**/*.pth
-models/**/*.ckpt
-models/**/*.pb
-models/**/*.weights
+
 
 # Keep model artifacts that are small
 !models/artifacts/*.json
