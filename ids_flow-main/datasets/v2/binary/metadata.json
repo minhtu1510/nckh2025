@@ -1,0 +1,11 @@
+{
+  "task": "binary",
+  "schema": "schemas/v2/binary.json",
+  "n_features": 45,
+  "total": 20115529,
+  "train": 16092424,
+  "test": 4023105,
+  "test_size": 0.2,
+  "seed": 0,
+  "fillna": "zero"
+}

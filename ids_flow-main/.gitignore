@@ -1,0 +1,26 @@
+# python
+__pycache__/
+*.pyc
+
+
+# datasets / raw data (too large)
+data/
+
+# ignore toàn bộ datasets
+datasets/**
+
+# nhưng cho phép giữ metadata + label encoder (nhỏ)
+# allow only small metadata + encoder
+!datasets/v2/
+!datasets/v2/**/
+!datasets/v2/**/metadata.json
+!datasets/v2/family/label_encoder.pkl
+# model artifacts (tuỳ bạn giữ hay không)
+# nếu model nhỏ và muốn push thì comment 2 dòng dưới
+# artifacts/
+# *.pt
+# *.pkl
+
+# node
+frontend/node_modules/
+frontend/dist/

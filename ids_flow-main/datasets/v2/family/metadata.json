@@ -1,0 +1,19 @@
+{
+  "task": "family_attack_only",
+  "schema": "schemas/v2/family.json",
+  "n_features": 45,
+  "classes": [
+    "Bot",
+    "BruteForce",
+    "DDoS",
+    "DoS",
+    "Infiltration",
+    "WebAttack"
+  ],
+  "total": 2600903,
+  "train": 2080724,
+  "test": 520179,
+  "test_size": 0.2,
+  "seed": 0,
+  "fillna": "zero"
+}

@@ -1,0 +1,17 @@
+{
+  "Benign": "Benign",
+  "Bot": "Bot",
+  "Brute_Force_-Web": "BruteForce",
+  "Brute_Force_-XSS": "BruteForce",
+  "DDOS_attack-HOIC": "DDoS",
+  "DDOS_attack-LOIC-UDP": "DDoS",
+  "DDoS_attacks-LOIC-HTTP": "DDoS",
+  "DoS_attacks-GoldenEye": "DoS",
+  "DoS_attacks-Hulk": "DoS",
+  "DoS_attacks-SlowHTTPTest": "DoS",
+  "DoS_attacks-Slowloris": "DoS",
+  "FTP-BruteForce": "BruteForce",
+  "Infilteration": "Infiltration",
+  "SQL_Injection": "WebAttack",
+  "SSH-Bruteforce": "BruteForce"
+}
