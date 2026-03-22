@@ -298,5 +298,13 @@ class InMemoryStore:
                 "queue_len": len(self.events),
             }
 
+    def clear(self):
+        """Xóa toàn bộ dữ liệu (dùng trước khi upload dataset mới)."""
+        with self.lock:
+            self.events.clear()
+            self.flows.clear()
+            self.counts.clear()
+            self.last_ts = 0.0
+
 
 STORE = InMemoryStore(max_events=5000, max_flows=20000)

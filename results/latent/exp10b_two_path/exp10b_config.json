@@ -1,0 +1,10 @@
+{
+  "poison_rates": [
+    0,
+    5
+  ],
+  "low_pct": 85,
+  "high_pct": 99,
+  "dede_epochs": 80,
+  "created_at": "20260322_090013"
+}

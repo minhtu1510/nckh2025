@@ -1,0 +1,12 @@
+{
+  "poison_rates": [
+    5,
+    10,
+    15,
+    50
+  ],
+  "low_pct": 50,
+  "high_pct": 99,
+  "dede_reused_from_exp10b": true,
+  "created_at": "20260306_101306"
+}

@@ -1,0 +1,5 @@
+poison_rate,stack_type,test_type,train_time_s,accuracy,precision,recall,f1_score
+5,standard,clean,523.03,0.98342,0.976962,0.973211,0.975083
+5,standard,gan_attack,523.03,0.735753,0.909349,0.230215,0.367414
+5,ganopt,clean,210.76,0.98048,0.973333,0.967961,0.97064
+5,ganopt,gan_attack,210.76,0.783172,0.934123,0.376042,0.536222

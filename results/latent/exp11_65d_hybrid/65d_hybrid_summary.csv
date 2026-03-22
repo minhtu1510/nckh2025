@@ -1,0 +1,5 @@
+poison_rate,test_scenario,f1_standard,f1_ganopt
+0,Clean,0.977,0.9761
+0,GAN Attack,0.4939,0.569
+5,Clean,0.9753,0.9719
+5,GAN Attack,0.3301,0.4165

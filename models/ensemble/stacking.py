@@ -13,7 +13,7 @@ Advantages over fixed weights:
 
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from pathlib import Path
 import joblib
 
@@ -32,16 +32,13 @@ class StackingEnsemble:
         """
         Args:
             base_models: Dict of {name: model} for base models
-            meta_model: Meta-learner (default: LogisticRegression)
+            meta_model: Meta-learner (default: RandomForestClassifier)
             val_split: Fraction of data for meta-learning
             random_state: Random seed
         """
         self.base_models = base_models
-        self.meta_model = meta_model or LogisticRegression(
-            max_iter=1000,
-            random_state=random_state,
-            class_weight='balanced'  # Handle imbalanced data
-        )
+        from sklearn.linear_model import LogisticRegression
+        self.meta_model = meta_model or LogisticRegression(max_iter=1000, random_state=random_state)
         self.val_split = val_split
         self.random_state = random_state
         self.is_fitted = False
@@ -84,7 +81,7 @@ class StackingEnsemble:
             
             # Handle neural network (MLP)
             if hasattr(model, 'fit') and hasattr(model, 'predict'):
-                if name == 'mlp':
+                if 'mlp' in name:
                     # MLP needs epochs, batch_size
                     model.fit(
                         X_train, y_train,
@@ -168,6 +165,12 @@ class StackingEnsemble:
             raise ValueError("Ensemble not fitted. Call fit() first.")
         
         meta_features = self._get_meta_features(X)
+        
+        # Soft-Threshold 0.35 cho Meta-Learner (LogisticRegression)
+        if type(self.meta_model).__name__ == 'LogisticRegression' and hasattr(self.meta_model, 'predict_proba'):
+            probs = self.meta_model.predict_proba(meta_features)[:, 1]
+            return (probs >= 0.35).astype(int)
+            
         return self.meta_model.predict(meta_features)
     
     def predict_proba(self, X):
@@ -257,6 +260,34 @@ class StackingEnsemble:
         return ensemble
 
 
+class MaxVotingMetaLearner:
+    """
+    A purely logical OR meta-learner that takes the maximum probability
+    across all base models. If ANY base model is confident it's an attack,
+    predict attack. This prevents OOD adversarial attacks from being
+    suppressed by models that are overconfident on training distribution.
+    """
+    def __init__(self):
+        self.classes_ = np.array([0, 1])
+        
+    def fit(self, X, y):
+        # Unsupervised routing logic, no fitting needed
+        return self
+        
+    def predict(self, X):
+        max_p = np.max(X, axis=1)
+        # Sử dụng mốc 0.5 cổ điển, vì DeDe đã lọc bớt Normal traffic rồi
+        return (max_p >= 0.5).astype(int)
+        
+    def predict_proba(self, X):
+        max_p = np.max(X, axis=1)
+        return np.column_stack((1 - max_p, max_p))
+        
+    def score(self, X, y):
+        from sklearn.metrics import accuracy_score
+        return accuracy_score(y, self.predict(X))
+
+
 def create_stacking_ensemble(input_dim, random_state=42):
     """
     Convenience function to create stacking ensemble with default models
@@ -273,6 +304,7 @@ def create_stacking_ensemble(input_dim, random_state=42):
     from sklearn.calibration import CalibratedClassifierCV
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.naive_bayes import GaussianNB
     
     # Match Exp1 config for fair comparison
     base_svm = LinearSVC(
@@ -302,7 +334,8 @@ def create_stacking_ensemble(input_dim, random_state=42):
             n_neighbors=5,
             weights='distance',
             n_jobs=-1
-        )
+        ),
+        'nb': GaussianNB()
     }
     
     return StackingEnsemble(base_models, random_state=random_state)
@@ -348,7 +381,11 @@ def create_stacking_ensemble_gan_optimized(input_dim, random_state=42):
     Expected GAN F1 improvement: 0.822 → ~0.93+
     """
     from models.advanced.mlp import create_mlp_model
-    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.naive_bayes import GaussianNB
+    from sklearn.svm import LinearSVC
+    from sklearn.calibration import CalibratedClassifierCV
+
+    base_svm = LinearSVC(C=1.0, max_iter=3000, random_state=random_state, verbose=0)
 
     base_models = {
         'mlp_deep': create_mlp_model(
@@ -363,16 +400,29 @@ def create_stacking_ensemble_gan_optimized(input_dim, random_state=42):
             dropout_rate=0.2,
             learning_rate=0.0005
         ),
-        'knn_5': KNeighborsClassifier(
-            n_neighbors=5,
-            weights='distance',
-            n_jobs=-1
-        ),
-        'knn_11': KNeighborsClassifier(
-            n_neighbors=11,
-            weights='distance',
-            n_jobs=-1
-        ),
+        'nb': GaussianNB(),
+        'svm': CalibratedClassifierCV(base_svm, cv=3)
     }
 
     return StackingEnsemble(base_models, random_state=random_state)
+
+
+def create_max_voting_ensemble_gan_optimized(input_dim, random_state=42):
+    """
+    Like GAN-optimized stacking, but uses MaxVotingMetaLearner instead of LogisticRegression.
+    If ANY model (especially NB) detects an attack, the entire ensemble flags it.
+    """
+    from models.advanced.mlp import create_mlp_model
+    from sklearn.naive_bayes import GaussianNB
+    from sklearn.svm import LinearSVC
+    from sklearn.calibration import CalibratedClassifierCV
+
+    base_svm = LinearSVC(C=1.0, max_iter=3000, random_state=random_state, verbose=0)
+    base_models = {
+        'mlp_deep': create_mlp_model(input_dim=input_dim, hidden_layers=[256, 128, 64], dropout_rate=0.3, learning_rate=0.001),
+        'mlp_wide': create_mlp_model(input_dim=input_dim, hidden_layers=[128, 64, 32], dropout_rate=0.2, learning_rate=0.0005),
+        'nb': GaussianNB(),
+        'svm': CalibratedClassifierCV(base_svm, cv=3)
+    }
+
+    return StackingEnsemble(base_models, meta_model=MaxVotingMetaLearner(), random_state=random_state)

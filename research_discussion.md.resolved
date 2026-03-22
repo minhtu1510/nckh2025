@@ -1,0 +1,251 @@
+# Tài liệu Thảo luận Nghiên cứu — IDS với DualEncoder + Two-Path Routing
+
+> Chuẩn bị cho buổi họp NCKH 2025 · Cập nhật: 2026-03-05
+
+---
+
+## PHẦN 1 — VẤN ĐỀ MẤU CHỐT & ĐỘNG LỰC NGHIÊN CỨU
+
+### 1.1 Bối cảnh và khoảng trống nghiên cứu
+
+Các hệ thống phát hiện xâm nhập mạng (IDS) dựa trên học máy đang đối mặt với một nghịch lý cơ bản:
+
+> **Nghịch lý bảo vệ**: Để nhận diện tấn công, mô hình phải học từ dữ liệu tấn công. Nhưng chính quá trình thu thập dữ liệu đó lại là điểm yếu mà kẻ tấn công có thể khai thác.
+
+**Những tồn tại chưa được giải quyết trong cộng đồng:**
+
+| Vấn đề | Hiện trạng |
+|--------|-----------|
+| Tấn công đơn lẻ vs. đa tấn công đồng thời | Phần lớn nghiên cứu chỉ test **một loại tấn công tại một thời điểm** — không phản ánh thực tế chiến trường |
+| Phòng thủ đòi hỏi mẫu adversarial | Nhiều phương pháp (adversarial training, certified defense) **cần biết trước mẫu tấn công để phòng thủ** — không khả thi trong triển khai thực tế |
+| Giả định defender biết đang bị tấn công | Hầu hết nghiên cứu test trong kịch bản **defender biết và đã chuẩn bị** — không thực tế |
+| Thiếu đánh giá khi toàn bộ pipeline bị nhiễm | Không ai hỏi: *"Nếu chính hệ thống phòng thủ (DeDe, encoder, classifier) đều bị train lại trên data độc hại thì sao?"* |
+| Biểu diễn đặc trưng chưa được khai thác | Hầu hết IDS làm việc trên raw features — **không ai dùng dual-view latent space** để tăng phân biệt benign/malicious |
+
+### 1.2 Tại sao đề xuất DualEncoder + Two-Path Routing?
+
+**Quan sát gốc**: Luồng mạng benign và malicious có phân phối cấu trúc khác nhau trong không gian đặc trưng. Một autoencoder đơn học reconstruction cho cả hai sẽ tạo ra latent space chồng lấp. Hai autoencoder riêng biệt — một cho benign, một cho malicious — tạo ra hai **"góc nhìn"** biệt lập, khi concat lại tạo thành biểu diễn 64-dim phân biệt tốt hơn đáng kể.
+
+**Chuỗi lý luận:**
+
+```
+Vấn đề 1: IDS bị đánh lừa bởi tấn công đa dạng
+    → Cần cơ chế nhận diện đa lớp, không phụ thuộc một điểm thất bại
+
+Vấn đề 2: Không có mẫu adversarial để train trước
+    → Dùng reconstruction error (DeDe) — không cần biết kiểu tấn công
+
+Vấn đề 3: Raw features dễ bị làm nhiễu bởi GAN
+    → Latent space compact hơn, khó perturbation hơn
+
+Vấn đề 4: Một classifier không đủ cho tất cả scenario
+    → Routing động: phân luồng theo mức độ "dị thường"
+      · Error thấp  → Standard Stacking (chính xác nhất cho traffic bình thường)
+      · Error trung → GAN-Opt Stacking (robust với adversarial evasion)
+      · Error cao   → Block triệt để (confident backdoor trigger)
+```
+
+**Điểm khác biệt cốt lõi so với state-of-the-art:**
+
+1. **Không yêu cầu mẫu adversarial** trong quá trình huấn luyện
+2. **Phòng thủ đa tấn công đồng thời** (poisoning + GAN evasion + backdoor trigger) trong một pipeline duy nhất
+3. **Routing động** thích ứng với mức độ rủi ro — không phải "one-size-fits-all"
+4. **Latent dual-view representation** giữ tốt hơn khi data bị nhiễm (Exp10, Exp11 chứng minh)
+
+### 1.3 Khung lý thuyết (Threat Model rõ ràng)
+
+**Attacker capabilities (điều kiện tấn công):**
+- Có quyền truy cập vào tập training data (insider threat hoặc poisoned data collection)
+- Có khả năng sinh traffic có kiểm soát (GAN-based evasion)
+- Có thể cấy trigger vào traffic (supply-chain attack)
+- **KHÔNG biết** kiến trúc chi tiết của hệ thống phòng thủ (black-box assumption)
+
+**Defender capabilities (điều kiện phòng thủ):**
+- Chỉ có dữ liệu thu thập thực tế (có thể đã bị nhiễm)
+- Không biết mình đang bị tấn công khi retrain
+- Muốn hệ thống tự động, không cần can thiệp thủ công
+
+---
+
+## PHẦN 2 — SO SÁNH VỚI CÁC PHƯƠNG PHÁP GẦN ĐÂY
+
+### 2.1 Bảng định vị nghiên cứu
+
+| Phương pháp | Loại tấn công xử lý | Yêu cầu mẫu adversarial | Đa tấn công đồng thời | Latent space | Routing động |
+|-------------|--------------------|--------------------------|-----------------------|--------------|--------------|
+| **Phương pháp đề xuất** | Poisoning + GAN Evasion + Backdoor Trigger | ❌ Không | ✅ Có | ✅ DualEnc 64-dim | ✅ 3-path |
+| DeDe (Yoon et al., 2022) | Backdoor Trigger | ❌ Không | ❌ Không | ✅ AE-based | ❌ Binary |
+| STRIP (Gao et al., 2019) | Backdoor | ❌ Không | ❌ Không | ❌ Raw | ❌ Không |
+| Adversarial Training (Madry et al.) | Adversarial Evasion | ✅ Bắt buộc | ❌ Kém | ❌ Raw | ❌ Không |
+| ML-based IDS (Khraisat et al., 2019) | Signature-based | N/A | ❌ Không | ❌ Raw | ❌ Không |
+| Ensemble IDS (Aburomman et al., 2017) | Tấn công cổ điển | N/A | ❌ Không | ❌ Raw | ❌ Không |
+
+### 2.2 Bài báo gần đây để so sánh (đề xuất tìm)
+
+**Hướng tìm kiếm ưu tiên:**
+
+#### Hướng 1: IDS dưới Data Poisoning
+- **Mục tiêu**: Tìm bài IDS + data poisoning defense trên CICIDS2017/2018
+- **Keyword**: `"IDS" "data poisoning" "label flipping" "machine learning" 2022-2024`
+- **Lý do thuyết phục**: Nếu của mình F1 ≥ của họ ở các poison rate tương tự → thuyết phục mạnh
+- **Điểm mạnh của mình**: Không cần biết poison rate trước; tự động qua routing
+
+#### Hướng 2: Robust IDS against GAN/Adversarial Attacks
+- **Keyword**: `"network intrusion detection" "GAN" "adversarial" "robustness" 2022-2024`
+- **Bài đáng chú ý**: "Adversarial Attacks on ML-Based IDS" (IEEE S&P, Usenix Security)
+- **Điểm so sánh**: ASR của họ vs ASR của mình khi defense được active
+
+#### Hướng 3: Autoencoder-based Anomaly Detection for IDS
+- **Keyword**: `"autoencoder" "anomaly detection" "IDS" "latent space" 2021-2024`
+- **Điểm khác biệt của mình**: DualEncoder (2 AE) vs. SingleEncoder (1 AE) — Exp11 đang chứng minh Dual tốt hơn
+
+#### Hướng 4: Multi-attack Scenarios
+- **Keyword**: `"IDS" "simultaneous attacks" "combined attack" "composite attack" 2022-2024`
+- **Đây là điểm mạnh nhất**: Nếu không ai test đa tấn công đồng thời với defense → đóng góp gốc
+
+### 2.3 Số liệu thực nghiệm cần chuẩn bị để so sánh
+
+| Metric | Our (Exp9 Clean) | Our (Exp9 Poison 50%) | So sánh với? |
+|--------|-------------------|------------------------|--------------|
+| F1 Clean traffic | ~0.975+ | ~0.94+ | Phương pháp baseline |
+| F1 GAN Evasion | ~0.92+ (Latent) | ~0.93+ | Adversarial defense papers |
+| ASR Backdoor | **0.0%** | **0.0%** | DeDe original paper |
+| False Positive Rate | ~1% | ~1.5% | IDS comparison papers |
+
+> [!IMPORTANT]
+> Số liệu ASR = 0.0% (block 100% backdoor) trong khi vẫn duy trì F1 > 0.92 là **rất mạnh** và **rất khó bị bắt bẻ**. Đây là điểm nhấn để so sánh.
+
+### 2.4 Template so sánh cho bài báo
+
+```
+Phương pháp của chúng tôi vượt trội ở:
+1. [Đa tấn công] Trong khi [X et al.] chỉ xét poisoning đơn lẻ, 
+   chúng tôi xử lý đồng thời 3 loại tấn công với pipeline thống nhất.
+
+2. [Không cần mẫu adversarial] Không giống adversarial training [Y et al.],
+   phương pháp không đòi hỏi biết trước mẫu tấn công khi training.
+
+3. [Latent robustness] Khi so với IDS trên raw features [Z et al.],
+   DualEncoder latent duy trì F1 > 0.92 ngay cả ở poison rate 50%.
+
+4. [Full-pipeline poisoning] Là nghiên cứu đầu tiên test kịch bản
+   toàn bộ pipeline (DeDe + Encoder + Classifier) đều bị nhiễm (Exp10).
+```
+
+---
+
+## PHẦN 3 — HẠN CHẾ VÀ HƯỚNG CẢI THIỆN
+
+### 3.1 Hạn chế kỹ thuật (Technical Limitations)
+
+#### 3.1.1 Chi phí huấn luyện và triển khai cao
+**Vấn đề**: Hệ thống gồm nhiều thành phần chạy nối tiếp:
+- DeDe (Masked Autoencoder) training
+- DualEncoder (2 × Autoencoder với architecture 50→256→128→64)
+- Standard Stacking (MLP + SVM + RF + KNN + meta-learner)
+- GAN-Opt Stacking (MLP deep + MLP wide + KNN + meta-learner)
+
+**Tác động**: Training time tổng thể lớn hơn đáng kể so với single-model IDS. Ở tập 300k samples, mỗi stacking mất 10-30 phút, toàn pipeline có thể mất 2-4 giờ.
+
+**Hướng cải thiện**:
+- Distillation: Compress stacking thành một mô hình nhỏ hơn sau khi train
+- Online learning: Update incremental thay vì retrain toàn bộ
+- Pruning DualEncoder: Thử Single Encoder với size lớn hơn (Exp11 đang làm)
+
+#### 3.1.2 Giả định attacker không biết kiến trúc (White-box limitation)
+**Vấn đề**: Toàn bộ các thí nghiệm đang test với **black-box attacker** — kẻ tấn công không biết threshold của DeDe, không biết routing logic, không biết kiến trúc dual encoder.
+
+**Tác động**: Trong điều kiện **white-box attack** (attacker biết toàn bộ kiến trúc), kẻ tấn công có thể:
+- Tối ưu GAN để bypass reconstruction error threshold cụ thể
+- Craft poisoning để shift threshold trong khi tránh bị detect
+- Tấn công adaptive vào điểm chuyển tiếp routing
+
+**Hướng cải thiện**:
+- Randomize threshold hoặc dùng ensemble thresholds
+- Test với adaptive attack (white-box GAN biết routing logic)
+- Differential privacy cho thresholds
+
+#### 3.1.3 DeDe bị nhiễm khi poison rate cao (Exp10 findings)
+**Vấn đề**: Khi poison rate ≥ 50%, threshold của DeDe bị calibrate sai — poisoned malicious samples được "coi là bình thường", bypass Block path sang Standard path.
+
+**Tác động**: Lớp bảo vệ đầu tiên (Block trigger) mất tác dụng khi toàn bộ hệ thống bị retrain trên data bị nhiễm nặng.
+
+**Hướng cải thiện**:
+- Threshold robustification: Dùng quantile bootstrap thay vì point estimate
+- Two-stage validation: Cross-validate threshold trên held-out clean set nếu có
+- Anomaly-based poisoning detection trước khi retrain
+
+#### 3.1.4 Giới hạn về tập dữ liệu
+**Vấn đề**: Thực nghiệm chủ yếu trên CICIDS2017, một phần CICIDS2018. Dataset này:
+- Được thu thập trong môi trường lab, không phản ánh traffic thực tế hoàn toàn
+- Imbalanced (benign >> malicious) — phải resample
+- Features đã được precomputed (NFStream/CICFlowMeter), không phải raw packets
+
+**Hướng cải thiện**:
+- Test trên thêm datasets: NSL-KDD, UNSW-NB15, CAIDA
+- Test với traffic thực tế từ deployment (Exp9 inference script đã có)
+- Đánh giá cross-dataset generalization
+
+#### 3.1.5 GAN attack không thích nghi với latent space
+**Vấn đề**: GAN hiện tại được train để bypass mô hình trên raw features. Khi được encode qua DualEncoder, GAN samples chưa chắc vẫn giữ được tính adversarial trong latent space.
+
+**Tác động**: Kết quả của Exp3 (GAN trên latent) có thể **overestimate** khả năng phòng thủ vì GAN chưa được tối ưu cho latent domain.
+
+**Hướng cải thiện**:
+- Latent-space GAN: Train GAN trực tiếp tấn công latent representation
+- Transfer attack: Evaluate transferability của GAN từ raw sang latent
+
+### 3.2 Hạn chế về thiết kế nghiên cứu (Research Design Limitations)
+
+#### 3.2.1 Stacking meta-learner đơn giản
+**Vấn đề**: Meta-learner hiện tại là Logistic Regression — đơn giản và có thể không capture được tương tác phức tạp giữa base learners khi data adversarial.
+
+**Hướng cải thiện**: Test attention-based meta-learner hoặc gradient boosting meta-learner.
+
+#### 3.2.2 Chưa có theoretical guarantee
+**Vấn đề**: Tất cả kết quả là empirical. Không có lý thuyết chứng minh tại sao routing boundary P75/P99 là tối ưu hay tại sao DualEncoder robust hơn SingleEncoder.
+
+**Hướng cải thiện**:
+- Experiment 11 (đang chạy) cung cấp empirical evidence cho DualEncoder vs Single
+- Tìm lý thuyết thông qua information bottleneck hoặc PAC-learning bounds
+
+#### 3.2.3 Không có real-time evaluation
+**Vấn đề**: Toàn bộ thực nghiệm là offline batch. Chưa đánh giá:
+- Latency của pipeline (DeDe → Routing → Stacking)
+- Throughput (flows/second)
+- Memory footprint khi deploy
+
+**Hướng cải thiện**: Đã có `inference_exp9.py` — cần benchmark latency trên luồng thực tế.
+
+### 3.3 Bảng tóm tắt hạn chế và mức độ ưu tiên
+
+| Hạn chế | Mức độ ảnh hưởng | Dễ giải quyết? | Ưu tiên fix |
+|--------|-----------------|----------------|-------------|
+| Black-box only, chưa test white-box | **Cao** — reviewer sẽ hỏi | Trung bình | ⭐⭐⭐ |
+| Chi phí huấn luyện lớn | Trung bình | Khó ngắn hạn | ⭐⭐ |
+| DeDe bị nhiễm ở poison 50% | **Cao** — Exp10 đã show | Trung bình | ⭐⭐⭐ |
+| Chỉ CICIDS2017 | Trung bình — dataset chuẩn | Khó (thời gian) | ⭐⭐ |
+| GAN chưa adaptive với latent | Trung bình | Trung bình | ⭐⭐ |
+| Không có theoretical guarantee | Thấp (NCKH level) | Khó | ⭐ |
+| Không có real-time benchmark | Thấp | Dễ | ⭐⭐ |
+
+---
+
+## PHỤ LỤC — Câu hỏi cần thảo luận trong họp
+
+### Về Mục đích nghiên cứu
+1. **Research question chính** là gì? Đề xuất: *"Liệu một hệ thống IDS với latent dual-view representation và adaptive routing có thể đồng thời chống lại nhiều loại tấn công mà không cần mẫu adversarial?"*
+2. Contribution nào là **đóng góp gốc** (novel)? → Multi-attack routing pipeline + DualEncoder cho IDS
+3. Nên claim kết quả Exp10 (toàn bộ pipeline bị nhiễm) là đóng góp gốc không?
+
+### Về So sánh
+4. Có bài báo nào cụ thể về "IDS + label-flip poisoning + defense" gần đây để compare trực tiếp không?
+5. Có nên submit kết quả lên benchmark như AIOps hoặc challenge dataset không?
+
+### Về Hạn chế
+6. White-box attack: Có cần chạy thêm experiment với adaptive GAN không? Tốn bao nhiêu thời gian?
+7. Giới hạn về "black-box attacker assumption" — nên nhắc đến như future work hay phải giải quyết ngay?
+
+---
+
+*Tài liệu này cần được review và bổ sung số liệu cụ thể từ kết quả thực nghiệm trước buổi họp.*

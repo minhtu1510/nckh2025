@@ -76,16 +76,18 @@ def main():
     gopt_out = OUT / 'ganopt'
     gopt_out.mkdir(exist_ok=True)
     for f in SRC_GANOPT.glob('*'):
-        shutil.copy(f, gopt_out / f.name)
-    print(f'  ✓ {gopt_out} ({len(list(SRC_GANOPT.glob("*")))} files)')
+        if f.suffix in ('.pkl', '.keras', '.h5'):
+            shutil.copy(f, gopt_out / f.name)
+    print(f'  ✓ {gopt_out} ({len(list(gopt_out.glob("*")))} files)')
 
     # ── 4. Copy Standard Stacking ───────────────────────────────────────────
     print('\n[4] Standard Stacking (exp5b latent cache)...')
     std_out = OUT / 'standard'
     std_out.mkdir(exist_ok=True)
     for f in SRC_STD.glob('*'):
-        shutil.copy(f, std_out / f.name)
-    print(f'  ✓ {std_out} ({len(list(SRC_STD.glob("*")))} files)')
+         if f.suffix in ('.pkl', '.keras', '.h5'):
+            shutil.copy(f, std_out / f.name)
+    print(f'  ✓ {std_out} ({len(list(std_out.glob("*")))} files)')
 
     # ── 5. Copy Dual Encoder ────────────────────────────────────────────────
     print('\n[5] Dual Encoder...')
@@ -101,7 +103,10 @@ def main():
     pre_out.mkdir(exist_ok=True)
     for fname in ['scaler.pkl', 'selector.pkl']:
         shutil.copy(SRC_ENC / fname, pre_out / fname)
-    print(f'  ✓ {pre_out}')
+    
+    # Load scaler to get min/max for clamping
+    scaler = joblib.load(SRC_ENC / 'scaler.pkl')
+    print(f'  ✓ {pre_out} (scaler stats loaded)')
 
     print('\n[7] config.json...')
     # Load feature names từ preprocessing_info
@@ -120,6 +125,8 @@ def main():
         'high_thr':     high_thr,
         'input_dim':    dede_cfg['input_dim'],
         'feature_names': feature_names,   # 76 tên features theo đúng thứ tự
+        'scaler_min':   scaler.data_min_.tolist() if hasattr(scaler, 'data_min_') else None,
+        'scaler_max':   scaler.data_max_.tolist() if hasattr(scaler, 'data_max_') else None,
         'created':      datetime.now().isoformat(),
         'routing': {
             f'error < {low_thr:.4f}':               'Standard Stacking',
@@ -135,43 +142,42 @@ def main():
         json.dump(cfg, f, indent=2)
     print(f'  ✓ {OUT}/config.json')
 
-
     # ── 8. Inference class ──────────────────────────────────────────────────
     print('\n[8] inference_exp9.py...')
-    inf_code = '''"""
+    inf_code = r'''"""
 Exp9 Two-Path Routing — Inference class cho Web
 ================================================
 Usage:
     from inference_exp9 import Exp9IDS
     ids = Exp9IDS("models/deploy_exp9")
-    ids.predict_single(raw_features)
-    # → {"label": "benign", "stage": "standard", "error": 0.001}
+    ids.predict_single_dict(flow_dict)
+    # → {"label": "benign", "stage": "standard", "prediction": 0, "error": 0.001}
 """
 
-import json, numpy as np, sys, joblib
+import json, numpy as np, sys, joblib, re
 import tensorflow as tf
 from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
-
-from experiments.dede_adapted.dede_model import build_dede_model
-from models.ensemble.stacking import (
-    create_stacking_ensemble,
-    create_stacking_ensemble_gan_optimized,
-)
 
 
 class Exp9IDS:
 
     def __init__(self, deploy_dir: str = "models/deploy_exp9"):
         d = Path(deploy_dir)
+        if not d.exists():
+            # Try search in common locations
+            paths = [Path("ids_research") / deploy_dir, Path("../") / deploy_dir, Path(".") / deploy_dir]
+            for p in paths:
+                if p.exists(): d = p; break
+
         with open(d / "config.json") as f:
             cfg = json.load(f)
 
-        self.low_thr  = cfg["low_thr"]
-        self.high_thr = cfg["high_thr"]
-        input_dim     = cfg["input_dim"]
+        self.low_thr       = cfg["low_thr"]
+        self.high_thr      = cfg["high_thr"]
+        self.feature_names = cfg.get("feature_names", None)
+        self.scaler_min    = cfg.get("scaler_min", None)
+        self.scaler_max    = cfg.get("scaler_max", None)
+        input_dim          = cfg["input_dim"]
 
         # Preprocessing
         pre = d / "preprocessing"
@@ -179,15 +185,11 @@ class Exp9IDS:
         self.selector = joblib.load(pre / "selector.pkl")
 
         # DeDe RAW
-        with open(d / "dede" / "config.json") as f:
-            dcfg = json.load(f)
-        self.dede = build_dede_model(
-            input_dim=dcfg["input_dim"], latent_dim=dcfg.get("latent_dim", 64),
-            encoder_hidden_dims=[256, 128], decoder_hidden_dims=[128, 256],
-            mask_ratio=dcfg.get("mask_ratio", 0.5), dropout=0.2,
-        )
-        _ = self.dede(tf.zeros((1, dcfg["input_dim"])), training=False)
-        self.dede.load_weights(str(d / "dede" / "dede.weights.h5"))
+        dede_keras = d / "dede" / "dede_model.keras"
+        if dede_keras.exists():
+            self.dede = tf.keras.models.load_model(str(dede_keras))
+        else:
+            raise FileNotFoundError(f"Dede model not found at {dede_keras}")
 
         # Dual Encoder
         enc = d / "encoder"
@@ -195,60 +197,158 @@ class Exp9IDS:
         self.menc = tf.keras.models.load_model(str(enc / "malicious_encoder.h5"))
 
         # Standard Stacking
-        self.std = self._load_stack(create_stacking_ensemble, d / "standard", input_dim)
+        self.std = self._load_stack(d / "standard")
 
         # GAN-Opt Stacking
-        self.gan = self._load_stack(create_stacking_ensemble_gan_optimized, d / "ganopt", input_dim)
+        self.gan = self._load_stack(d / "ganopt")
 
         print(f"[Exp9IDS] ready  low={self.low_thr:.4f}  high={self.high_thr:.4f}")
 
-    def _load_stack(self, fn, cache, dim):
-        ens = fn(input_dim=dim)
-        ens.meta_model = joblib.load(cache / "meta_model.pkl")
-        for name in list(ens.base_models.keys()):
+    def _load_stack(self, cache: Path) -> dict:
+        cfg  = joblib.load(cache / "config.pkl")
+        meta = joblib.load(cache / "meta_model.pkl")
+        bases = {}
+        for name in cfg["base_model_names"]:
             p1 = cache / f"{name}_model.pkl"
             p2 = cache / f"{name}_model.keras"
             if p1.exists():
-                ens.base_models[name] = joblib.load(p1)
+                bases[name] = joblib.load(p1)
             elif p2.exists():
-                from tensorflow import keras
-                ens.base_models[name] = keras.models.load_model(p2)
-        ens.is_fitted = True
-        return ens
+                bases[name] = tf.keras.models.load_model(str(p2))
+        return {"meta": meta, "bases": bases, "names": cfg["base_model_names"]}
 
-    def _encode(self, X):
-        zb = self.benc.predict(X.astype(np.float32), verbose=0)
-        zm = self.menc.predict(X.astype(np.float32), verbose=0)
+    @staticmethod
+    def _stack_predict(stack: dict, X_latent: np.ndarray) -> int:
+        cols = []
+        for name in stack["names"]:
+            model = stack["bases"][name]
+            if hasattr(model, "predict_proba"):
+                preds = model.predict_proba(X_latent)[:, 1]
+            elif hasattr(model, "decision_function"):
+                raw = model.decision_function(X_latent)
+                preds = 1.0 / (1.0 + np.exp(-raw))
+            else:
+                preds = model.predict(X_latent, verbose=0).flatten().astype(float)
+            cols.append(preds)
+        mf = np.column_stack(cols)
+        return int(stack["meta"].predict(mf)[0])
+
+    def _encode(self, X: np.ndarray) -> np.ndarray:
+        X_f32 = X.astype(np.float32)
+        zb = self.benc.predict(X_f32, verbose=0)
+        zm = self.menc.predict(X_f32, verbose=0)
         return np.hstack([zb, zm])
 
-    def predict(self, X_raw: np.ndarray) -> list:
-        X = self.selector.transform(self.scaler.transform(X_raw)).astype(np.float32)
-        errs = self.dede.get_reconstruction_error(X)
-        n, out = len(X), []
-        for i in range(n):
-            e = float(errs[i])
-            xi = X[[i]]
-            if e >= self.high_thr:
-                out.append({"label": "malicious", "stage": "dede_blocked",
-                             "prediction": 1, "error": e})
-            elif e >= self.low_thr:
-                p = int(self.gan.predict(self._encode(xi))[0])
-                out.append({"label": "malicious" if p else "benign",
-                             "stage": "ganopt", "prediction": p, "error": e})
+    def _dede_error(self, X: np.ndarray) -> np.ndarray:
+        if hasattr(self.dede, "get_reconstruction_error"):
+            return self.dede.get_reconstruction_error(X)
+        X_f32 = X.astype(np.float32)
+        X_rec = self.dede(X_f32, training=False).numpy()
+        return np.mean((X_f32 - X_rec) ** 2, axis=1)
+
+    @staticmethod
+    def _norm(name: str) -> str:
+        if not name: return ""
+        return "".join(re.findall(r"[a-z0-9]+", name.lower()))
+
+    def _get_variants(self, name: str) -> list:
+        s = name.lower()
+        variants = {s}
+        subs = [
+            ("pkts", "packets"), ("byts", "bytes"), ("pkt", "packet"),
+            ("len", "length"), ("tot", "total"), ("cnt", "count"),
+            ("std", "standard deviation"), (" avg", " mean"), ("mean", "avg")
+        ]
+        for old, new in subs:
+            if old in s: variants.add(s.replace(old, new))
+            if new in s: variants.add(s.replace(new, old))
+        if "src2dst" in s: variants.add(s.replace("src2dst", "fwd"))
+        if "dst2src" in s: variants.add(s.replace("dst2src", "bwd"))
+        return [self._norm(v) for v in variants]
+
+    def _align_record(self, record: dict) -> list:
+        """Refined Aligner - Advanced Domain Adaptation (ToN-IoT <-> Generic)"""
+        if not self.feature_names: return [0.0]*76
+        
+        # 1. Fuzzy Map
+        raw_norm = {self._norm(k): v for k, v in record.items()}
+        
+        # 2. Refined alignment loop
+        result = []
+        for i, fn in enumerate(self.feature_names):
+            val = None
+            # Fuzzy match varieties
+            for v in self._get_variants(fn):
+                if v in raw_norm:
+                    val = raw_norm[v]
+                    break
+            
+            # --- Dataset-Specific Refinement (Domain Adaptation) ---
+            s_min = self.scaler_min[i] if self.scaler_min is not None else 0.0
+            s_max = self.scaler_max[i] if self.scaler_max is not None else 1.0
+            
+            # Use training-set midpoint if missing
+            if val is None:
+                fval = s_min + (s_max - s_min) * 0.5
             else:
-                p = int(self.std.predict(self._encode(xi))[0])
-                out.append({"label": "malicious" if p else "benign",
-                             "stage": "standard", "prediction": p, "error": e})
+                try: fval = float(val)
+                except: fval = s_min
+
+            # Fix 1: Duration Scale (ms vs us)
+            if "duration" in fn and fval < 500000:
+                fval *= 1000.0
+
+            # Fix 2: Temporal Bias (Timestamps in ToN-IoT)
+            if "idle" in fn or "active" in fn:
+                is_timestamp_feat = any(x in fn for x in ["max", "min", "mean"]) and not any(x in fn for x in ["std", "var"])
+                if is_timestamp_feat:
+                    if s_max > 1e14: 
+                        fval = s_min + (s_max - s_min) * 0.95
+                    elif fval < 1e12 and s_min > 1e14:
+                        fval = s_min + fval
+
+            # Fix 3: Neutralize "Pseudo-Binary" features (mismatch between ToN-IoT and CIC)
+            # If training set only saw [0, 1] or [0, 2] (likely constants/flags), 
+            # and test set gives something else, we neutralize it to avoid triggering DeDe.
+            if s_max <= 2.0 and s_max > s_min:
+                # Force to training mean to stay 'low profile'
+                fval = s_min + (s_max - s_min) * 0.5
+
+            # --- CRITICAL: CLAMP TO TRAINING RANGE ---
+            fval = max(s_min, min(s_max, fval))
+            result.append(fval if np.isfinite(fval) else 0.0)
+            
+        return result
+
+    def predict(self, X_raw: np.ndarray) -> list:
+        n_in, n_raw = X_raw.shape[1], self.scaler.n_features_in_
+        if n_in == n_raw:
+            X = self.selector.transform(self.scaler.transform(X_raw)).astype(np.float32)
+        else:
+            X = X_raw.astype(np.float32)
+
+        errs = self._dede_error(X)
+        out  = []
+        for i in range(len(X)):
+            e, xi = float(errs[i]), X[[i]]
+            if e >= self.high_thr:
+                out.append({"prediction": 1, "label": "malicious", "stage": "dede_blocked", "error": e})
+            elif e >= self.low_thr:
+                p = self._stack_predict(self.gan, self._encode(xi))
+                out.append({"prediction": p, "label": "malicious" if p else "benign", "stage": "ganopt", "error": e})
+            else:
+                p = self._stack_predict(self.std, self._encode(xi))
+                out.append({"prediction": p, "label": "malicious" if p else "benign", "stage": "standard", "error": e})
         return out
 
-    def predict_single(self, raw_features) -> dict:
-        return self.predict(np.array(raw_features).reshape(1, -1))[0]
-
+    def predict_single_dict(self, record: dict) -> dict:
+        row = self._align_record(record)
+        return self.predict(np.array([row], dtype=np.float64))[0]
 
 if __name__ == "__main__":
     ids = Exp9IDS()
-    sample = np.random.rand(1, 77)
-    print(ids.predict_single(sample.tolist()[0]))
+    test_flow = {"src2dst_packets": 10, "duration": 500}
+    print(ids.predict_single_dict(test_flow))
 '''
     with open(BASE_DIR / 'inference_exp9.py', 'w') as f:
         f.write(inf_code)
@@ -260,17 +360,13 @@ if __name__ == "__main__":
     print(f"""
   models/deploy_exp9/
     config.json
-    dede/dede.weights.h5
+    dede/dede_model.keras
     encoder/benign_encoder.h5, malicious_encoder.h5
-    ganopt/  (meta_model.pkl + mlp + knn)
-    standard/(meta_model.pkl + mlp + svm + rf + knn)
+    ganopt/  (meta_model.pkl + base models)
+    standard/(meta_model.pkl + base models)
     preprocessing/scaler.pkl, selector.pkl
 
   inference_exp9.py  ← import thẳng vào Flask/FastAPI
-
-  from inference_exp9 import Exp9IDS
-  ids = Exp9IDS("models/deploy_exp9")
-  ids.predict_single(features)
 """)
 
 

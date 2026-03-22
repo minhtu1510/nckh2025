@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { getAttacks, getConfig, getFlows, getStats, setConfig } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { getAttacks, getConfig, getFlows, getStats, setConfig, uploadCsv, uploadCsvChunked, resetStore } from "../api";
 
 import {
   Box,
@@ -21,7 +21,12 @@ import {
   TableRow,
   Tooltip,
   TableContainer,
+  Alert,
+  LinearProgress,
 } from "@mui/material";
+
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 
 import StatCards from "../components/StatCards";
 
@@ -35,6 +40,302 @@ import {
   TopSourcesChart,
   ProtocolDistribution,
 } from "../components/Charts";
+
+/* -------- Upload CSV Card -------- */
+
+// File nhỏ hơn ngưỡng này: dùng upload cũ (stream batch).  Lớn hơn: dùng chunked.
+const LARGE_FILE_THRESHOLD_MB = 10;
+const CHUNK_SIZE_MB = 4;  // kích thước mỗi chunk gửi lên
+
+function UploadCSVCard({ onUploaded }) {
+  const [file, setFile] = useState(null);
+  const [maxRows, setMaxRows] = useState(0);        // 0 = không giới hạn
+  const [batchSize, setBatchSize] = useState(500);    // số dòng / batch
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [progress, setProgress] = useState(0);        // 0-100
+  const [progressLabel, setProgressLabel] = useState("");
+  const inputRef = useRef();
+  const abortRef = useRef(null);   // AbortController để hủy upload
+
+  const handleFile = (f) => {
+    if (!f) return;
+    setFile(f);
+    setResult(null);
+    setError(null);
+    setProgress(0);
+    setProgressLabel("");
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) handleFile(f);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    setProgress(0);
+
+    const fileMB = file.size / (1024 * 1024);
+    const useChunked = fileMB > LARGE_FILE_THRESHOLD_MB;
+
+    if (useChunked) {
+      // ── Chunked upload cho file lớn ─────────────────────────────
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      try {
+        const res = await uploadCsvChunked(file, {
+          chunkSizeMB: CHUNK_SIZE_MB,
+          maxRows: maxRows,
+          batchSize: batchSize,
+          useAdaptiveDede: true,
+          signal: ctrl.signal,
+          onProgress: (pct, totalIngested, chunkIdx, totalChunks) => {
+            setProgress(pct);
+            setProgressLabel(
+              `Chunk ${chunkIdx + 1}/${totalChunks} — Đã phân tích ${totalIngested.toLocaleString()} flows (${pct}%)`
+            );
+          },
+        });
+        setResult(res);
+        if (onUploaded) onUploaded();
+      } catch (e) {
+        if (e?.name === "AbortError") {
+          setError("⚠️ Upload đã bị hủy.");
+        } else {
+          setError(e?.response?.data?.error || e?.message || "Upload failed");
+        }
+      } finally {
+        abortRef.current = null;
+        setLoading(false);
+      }
+    } else {
+      // ── Legacy upload cho file nhỏ ──────────────────────────────
+      setProgressLabel("Đang xử lý...");
+      try {
+        const res = await uploadCsv(file, maxRows || 5000, batchSize);
+        setProgress(100);
+        setResult(res);
+        if (onUploaded) onUploaded();
+      } catch (e) {
+        setError(e?.response?.data?.error || e?.message || "Upload failed");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleCancel = () => {
+    abortRef.current?.abort();
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm("Xóa toàn bộ dữ liệu dashboard?")) return;
+    try {
+      await resetStore();
+      setResult(null);
+      setFile(null);
+      setProgress(0);
+      setProgressLabel("");
+      if (onUploaded) onUploaded();
+    } catch (e) {
+      setError(e?.message || "Reset failed");
+    }
+  };
+
+  const fileMB = file ? (file.size / (1024 * 1024)) : 0;
+  const willUseChunked = fileMB > LARGE_FILE_THRESHOLD_MB;
+
+  return (
+    <Card
+      sx={{
+        background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+        border: "1px solid rgba(99,179,237,0.3)",
+        borderRadius: 3,
+        mb: 2,
+      }}
+    >
+      <CardContent>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <CloudUploadIcon sx={{ color: "#63b3ed" }} />
+            <Typography variant="h6" sx={{ fontWeight: 900, color: "#e2e8f0" }}>
+              Upload CICIDS Dataset (CSV)
+            </Typography>
+          </Stack>
+          <Tooltip title="Reset / Xóa toàn bộ dữ liệu dashboard">
+            <Button
+              startIcon={<DeleteSweepIcon />}
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={handleReset}
+              sx={{ borderRadius: 2 }}
+            >
+              Reset Data
+            </Button>
+          </Tooltip>
+        </Stack>
+
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="flex-start">
+          {/* Drop zone */}
+          <Box
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => !loading && inputRef.current?.click()}
+            sx={{
+              flex: 1,
+              minHeight: 100,
+              border: `2px dashed ${dragging ? "#63b3ed" : "rgba(99,179,237,0.4)"}`,
+              borderRadius: 2,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: loading ? "not-allowed" : "pointer",
+              bgcolor: dragging ? "rgba(99,179,237,0.1)" : "rgba(255,255,255,0.03)",
+              transition: "all 0.2s",
+              px: 2, py: 2,
+              "&:hover": !loading ? { bgcolor: "rgba(99,179,237,0.08)", borderColor: "#63b3ed" } : {},
+            }}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".csv"
+              style={{ display: "none" }}
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+            <CloudUploadIcon sx={{ fontSize: 36, color: "rgba(99,179,237,0.7)", mb: 1 }} />
+            <Typography variant="body2" sx={{ color: "#94a3b8", textAlign: "center" }}>
+              {file ? (
+                <span style={{ color: "#63b3ed", fontWeight: 700 }}>📄 {file.name}</span>
+              ) : (
+                "Kéo thả hoặc click để chọn file CSV (CICIDS2017/2018)"
+              )}
+            </Typography>
+            {file && (
+              <Typography variant="caption" sx={{ color: "#64748b", mt: 0.5 }}>
+                {fileMB >= 1024
+                  ? `${(fileMB / 1024).toFixed(2)} GB`
+                  : fileMB >= 1
+                    ? `${fileMB.toFixed(1)} MB`
+                    : `${(file.size / 1024).toFixed(1)} KB`}
+                {willUseChunked && (
+                  <span style={{ color: "#f6ad55", marginLeft: 8 }}>
+                    ⚡ Chunked upload ({CHUNK_SIZE_MB}MB/chunk)
+                  </span>
+                )}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Controls */}
+          <Stack spacing={1.5} sx={{ minWidth: 210 }}>
+            <TextField
+              size="small"
+              label="Max rows (0=tất cả)"
+              type="number"
+              value={maxRows}
+              onChange={(e) => setMaxRows(Number(e.target.value) || 0)}
+              inputProps={{ min: 0, max: 500000, step: 1000 }}
+              sx={{
+                "& .MuiInputBase-root": { bgcolor: "rgba(255,255,255,0.06)", color: "#e2e8f0" },
+                "& .MuiInputLabel-root": { color: "#94a3b8" },
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(99,179,237,0.3)" },
+              }}
+            />
+            <TextField
+              size="small"
+              label="Batch size (RAM)"
+              type="number"
+              value={batchSize}
+              onChange={(e) => setBatchSize(Math.max(50, Number(e.target.value) || 500))}
+              inputProps={{ min: 50, max: 2000, step: 50 }}
+              sx={{
+                "& .MuiInputBase-root": { bgcolor: "rgba(255,255,255,0.06)", color: "#e2e8f0" },
+                "& .MuiInputLabel-root": { color: "#94a3b8" },
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(99,179,237,0.3)" },
+              }}
+            />
+            <Button
+              variant="contained"
+              onClick={handleUpload}
+              disabled={!file || loading}
+              startIcon={<CloudUploadIcon />}
+              sx={{
+                background: "linear-gradient(135deg, #667eea, #764ba2)",
+                color: "white",
+                fontWeight: 700,
+                borderRadius: 2,
+                "&:disabled": { opacity: 0.5 },
+                "&:hover": { background: "linear-gradient(135deg, #764ba2, #667eea)" },
+              }}
+            >
+              {loading ? "Đang xử lý..." : "Upload & Phân tích"}
+            </Button>
+            {loading && (
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                onClick={handleCancel}
+                sx={{ borderRadius: 2 }}
+              >
+                ❌ Hủy upload
+              </Button>
+            )}
+          </Stack>
+        </Stack>
+
+        {loading && (
+          <Box sx={{ mt: 2 }}>
+            <LinearProgress
+              variant={willUseChunked ? "determinate" : "indeterminate"}
+              value={progress}
+              sx={{ borderRadius: 2, height: 8 }}
+            />
+            <Typography variant="caption" sx={{ color: "#94a3b8", mt: 0.5, display: "block" }}>
+              {progressLabel || "Đang chạy Exp9 inference..."}
+            </Typography>
+          </Box>
+        )}
+
+        {result && (
+          <Alert
+            severity="success"
+            sx={{ mt: 2, bgcolor: "rgba(72,187,120,0.1)", color: "#68d391", border: "1px solid rgba(72,187,120,0.3)" }}
+          >
+            ✅ Phân tích xong <strong>{result.ingested?.toLocaleString()}</strong> flows
+            {result.total_csv_rows ? ` / ${result.total_csv_rows.toLocaleString()} dòng CSV` : ""}
+            &nbsp;|&nbsp;Features mapped: <strong>{result.mapped_features}</strong>/76
+            &nbsp;| Missing: <strong>{result.missing_features}</strong>
+            {result.dede_mode && <>&nbsp;| Mode: <strong>{result.dede_mode}</strong></>}
+          </Alert>
+        )}
+
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        <Typography variant="caption" sx={{ color: "#475569", mt: 1.5, display: "block" }}>
+          💡 File &lt;{LARGE_FILE_THRESHOLD_MB}MB: upload thường. File &gt;{LARGE_FILE_THRESHOLD_MB}MB: tự động chia chunk {CHUNK_SIZE_MB}MB/chunk, RAM backend thấp.
+          Batch size nhỏ hơn = ít RAM hơn (nhưng chậm hơn). Giảm xuống 100–200 nếu máy yếu.
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
 
 /* -------- helpers -------- */
 
@@ -378,7 +679,9 @@ export default function Dashboard() {
 
   return (
     <Box sx={{ pb: 3 }}>
+      <UploadCSVCard onUploaded={refresh} />
       <StatCards counts={counts} queueLen={stats.queue_len} last={last} />
+
 
       {/* ✅ global filters only (verdict + time) */}
       <Box

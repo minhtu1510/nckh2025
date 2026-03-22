@@ -1,0 +1,79 @@
+TÓM TẮT Ý TƯỞNG VÀ NỘI DUNG THỰC HIỆN CÁC THÍ NGHIỆM (IDS RESEARCH)
+
+PHẦN I: NHÓM THÍ NGHIỆM CƠ BẢN VÀ MÔ PHỎNG TẤN CÔNG ĐƠN LẺ (EXP 1 - EXP 5)
+
+1. Thí nghiệm 1 (Baseline)
+• Ý tưởng: Thiết lập mức độ hiệu năng chuẩn (Base) cho hệ thống IDS trong điều kiện không bị tấn công hay can thiệp.
+• Nội dung thực hiện: 
+  - Huấn luyện: Khởi tạo và huấn luyện các mô hình cơ sở độc lập (MLP, SVM, RandomForest, KNN) trên tập dữ liệu hoàn toàn sạch (200k mẫu benign + 100k mẫu malicious).
+  - Kiểm thử: Đánh giá bằng tập test sạch (100k mẫu). Ghi nhận các bộ chỉ số Accuracy, Precision, Recall, F1-score làm mốc tham chiếu cho các bài test tấn công sau này.
+  - Phân loại Không gian: Chạy trên cả không gian RAW và hệ không gian được nén mã hoá LATENT.
+
+2. Thí nghiệm 2 (Data Poisoning)
+• Ý tưởng: Mô phỏng hình thức tấn công đầu độc tập dữ liệu (Poisoning) bằng cách lật/tráo nhãn (flip label). Mục đích để làm mô hình "tin" rằng các luồng độc hại thực chất là luồng bình thường.
+• Nội dung thực hiện: 
+  - Đầu độc dữ liệu: Dùng thuật toán đổi nhãn của các mẫu Malicious thành Benign với các tỷ lệ khác nhau trong tập huấn luyện (5%, 10%, 15%, 50%).
+  - Huấn luyện & Kiểm thử: Train các mô hình ML truyền thống bằng tập dữ liệu đã bị đầu độc này. Sau đó đưa vào kiểm thử trên tập dữ liệu Sạch để phơi bày sự sụt giảm F1-score. Chỉ ra mô hình nào dễ sụp đổ khi bị tấn công tập Train.
+
+3. Thí nghiệm 3 (GAN Adversarial Attack)
+• Ý tưởng: Đánh giá sức sống sót của hệ thống trước loại hình tấn công lẩn tránh đối kháng tinh vi (Adversarial Evasion) được tự động sinh ra bởi GAN.
+• Nội dung thực hiện: 
+  - Xây dựng GAN: Huấn luyện mạng Generative Adversarial Network (WGAN-GP) học phương sai của các luồng độc hại. Đưa thêm nhiễu vào mẫu độc hại sao cho bộ phân loại nhận nhầm thành luồng bình thường.
+  - Kiểm thử chéo: Lấy các mô hình Baseline (từ Exp1, train bằng đồ sạch) đi dự đoán trên tệp dữ liệu test nhân tạo (GAN-generated adversarial samples). Đo lường tỷ lệ bắt rớt (False Negative tăng cao mạnh).
+
+4. Thí nghiệm 4 (Ensemble Latent)
+• Ý tưởng: Các mô hình đơn lẻ có lỗ hổng học máy. Việc sử dụng các cấu trúc kết hợp đa mô hình (Stacking/Ensemble) sẽ nâng cấp độ phân giải và giảm thiểu điểm mù.
+• Nội dung thực hiện: 
+  - Khởi tạo Stacking: Xây dựng một đường ống gồm 2 lớp. Lớp Base (Lớp 1) dùng SVM, RF, MLP dự đoán và trả ra xác suất. Lớp Meta (Lớp 2) tổng hợp các tín hiệu ấy đưa ra kết luận cuối. 
+  - Chạy so sánh: Chứng minh F1-score của Stacking luôn ổn định và cao hơn bất kỳ Base Model độc lập nào trên dữ liệu Latent.
+
+5. Thí nghiệm 5 (Trigger Backdoor)
+• Ý tưởng: Kẻ tấn công cấy mã ngầm (Trigger) vào luồng mạng độc hại và thiết lập cửa hậu (Backdoor). Bất kì luồng độc hại nào mang trigger này khi đi qua IDS sẽ nghiễm nhiên được thả qua.
+• Nội dung thực hiện: 
+  - Cấy Trigger: Gán cứng một quy luật giá trị (VD: features [13, 30, 39] = 1.0) vào N% mẫu malicious trong tập train và dán mác benign.
+  - Kiểm thử Threat Model: Xây dựng tập test "Mixed Realistic" (Luồng sạch + Luồng Trigger độc hại). Mô hình sẽ nhận diện. Đo đạc bằng chỉ số ASR (Attack Success Rate - Tỷ lệ tấn công thành công). Kết quả cho thấy các mô hình Neural hiện tại bị vượt mặt hoàn toàn bởi backdoor.
+
+PHẦN II: TÍCH HỢP PHÒNG THỦ VÀ MA TRẬN ĐÁNH GIÁ (EXP 6 - EXP 8)
+
+6. Thí nghiệm 6 (Hybrid Defense / v2, v3)
+• Ý tưởng: Chống lại các hình thức tấn công phức tạp bằng một cấu trúc Lai (Hybrid Defense System). 
+• Nội dung thực hiện: Hệ thống vận hành theo quy trình ống 2 giai đoạn (2-stage):
+  - Stage 1 (DeDe-Adapted Filter): Tất cả mẫu đầu vào đi qua bộ mã hoá Masked Autoencoder. Bộ tính toán sẽ xuất ra "Reconstruction Error" (Lỗi tái cấu trúc). Nếu lỗi > Threshold (Mức 99%), được định vị là Trigger Backdoor → BLOCK NGAY (Cản 100% Backdoor).
+  - Stage 2 (Stacking Ensemble): Các mẫu lọt qua cửa 1 (Lỗi thấp) được chuyển tới cụm phân loại Stacking để sàng lọc sạch/nhiễu GAN.
+
+7. Thí nghiệm 7 (Combined Attack Matrix)
+• Ý tưởng: Mô phỏng bài Test-Crash (Khảo nghiệm cực hạn) theo dạng Ma trận bằng cách kết hợp nhiều loại tấn công tại cùng một thời điểm lên hệ thống ở cả lúc Train và lúc Test.
+• Nội dung thực hiện: 
+  - Huấn luyện cơ sở: Huấn luyện một hệ thống Hybrid Defense trên 5 kịch bản tập Train khác nhau (Sạch, Đầu độc 5%, 10%, 15%, 50%).
+  - Kiểm thử đa chiều: Bắt từng kịch bản Train đó phải Test chéo trên 3 hệ thống dữ liệu: Dữ liệu Sạch, Dữ liệu sinh GAN Evasion, và Dữ liệu tẩm Trigger Backdoor.
+  - Đầu ra: Kết xuất bảng ma trận 5x3 đo F1-Score và ASR, chỉ ra ô "Tồi tệ nhất" (vd: Ô Bị Poison nặng nhất + Test bằng lừa đảo khéo nhất GAN).
+
+8. Thí nghiệm 8 (Standard Stacking Analysis)
+• Ý tưởng: Phân tích sâu điểm nghẽn kiến trúc học máy của đường ống số 2. So sánh "GAN-Opt Stacking" với "Standard Stacking".
+• Nội dung thực hiện: Chạy cơ chế chạy ma trận Matrix y chang Exp7. Tuy nhiên, tập Stacking 2 được mở đầy đủ các thuật toán như Support Vector Machine (SVM) và Random Forest (RF). Kết quả so chiếu đưa ra kết luận: SVM và RF thực ra lại làm suy yếu hệ thống khi phòng thủ đối kháng GAN do bản chất các cây phân loại và mặt phẳng siêu không gian nhạy cảm với can thiệp nhiễu.
+
+PHẦN III: THÍ NGHIỆM ĐỀ XUẤT TỐI TÂN NHẤT: EXP 9 (TWO-PATH ROUTING)
+
+1. Ý Tưởng Định Tuyến Cơ Động (The Routing Idea)
+Exp6 và Exp7 đưa tất cả dữ liệu (không chặn) vào TẤT CẢ các model của Stacking gây dư thừa và suy giảm hiệu suất chéo. Exp9 đưa ra sáng kiến ĐỊNH TUYẾN PHÂN NHÁNH 3 LỚP (Two-Path Routing) phân độ rủi ro cực kỳ thông minh tuỳ theo giá trị Reconstruction Error từ DeDe.
+
+2. Nội Dung Phân Tuyến và Quy Trình (Workflow)
+Hệ thống đón dữ liệu và đẩy qua cơ chế đo sai số tái cấu trúc của DeDe-Adapted:
+  - NHÁNH 1 (Error < Percentile 75%): Tập dữ liệu "Sạch - An toàn".
+    => Hành động: Định tuyến vào mạng "Standard Stacking" (MLP + SVM + RF + KNN). Tập này đem lại khả năng dò tìm traffic thông thường cao nhất và tốt nhất ở trạng thái không lẩn tránh.
+  - NHÁNH 2 (Percentile 75% <= Error < Percentile 99%): Tập dữ liệu "Nghi vi phạm lẩn tránh - GAN-like".
+    => Hành động: Phân luồng rẽ nhánh vào mạng "GAN-Opt Stacking" (Chỉ gồm deep MLP, wide MLP và KNN). Hệ thống này đã được tinh chỉnh, gỡ các mạng nhạy cảm (SVM, RF) ra để tăng cường độ lì, chuyên dùng phản công sự làm nhiễu GAN evasion.
+  - NHÁNH 3 (Error >= Percentile 99%): Tập dữ liệu "Nguy cơ Cửa hậu cực đoan - Trigger-like".
+    => Hành động: Đánh dấu chặn Block và trả về kết quả Malicious triệt để mà không cần đẩy qua các lớp phân loại nơ-ron nữa.
+
+3. Điểm nhấn Kết Quả Trên Dữ Liệu RAW và LATENT (Results)
+Bằng cách đẩy mô hình quy trình chạy ma trận 5x3, ta thu được:
+  • Phiên bản RAW (Raw 50-dims):
+    - Đem lại khả năng chống Backdoor tuyệt mật (ASR = 0%), đi kèm tỷ lệ False Positive bé ~ 1.03%.
+    - Trong tình huống không nắn nhiễu, nhánh 1 hoạt động tốt đưa F1 của luồng sạch lên tiệm cận cực đại (Clean F1 > 0.975).
+    - Hạn chế: Dù Routing có phân luồng cực khéo, nếu bị Poison dữ liệu đầu vào lên tới 50%, khả năng đánh chặn GAN sụp đổ chỉ còn lưu giữ ở F1 = 0.85+.
+
+  • Phiên bản LATENT (Latent 64-dims):
+    - Đây chính là tinh hoa của nghiên cứu. Việc rẽ 3 nhánh tuỳ biến mức độ dựa trên mã biểu diễn ẩn (Latent Space) kết hợp cực tốt với nhau tạo nên hiện tượng siêu phục hồi (Robustness).
+    - Thậm chí khi toàn bộ tập Train bị kẻ thù làm suy yếu huỷ hoại tới 50% (Poison_50), định tuyến 3 nhánh bằng Latent duy trì được mạch đánh chặn tấn công GAN thần kì không dưới mốc 0.92+ F1-score.
+    - Cản backdoor 100% (ASR = 0.0), F1-score cho backdoor test luôn duy trì xấp xỉ 0.967+. Giải quyết hoàn hảo mâu thuẫn giữa "Bảo toàn phân loại sạch" (Standard models) và "Chống lẩn tránh, ngụy trang" (GAN-Opt models). Mọi yếu điểm của phòng thủ tĩnh đều được xử lý bằng định tuyến luồng động.

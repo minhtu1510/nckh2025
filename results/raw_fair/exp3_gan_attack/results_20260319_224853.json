@@ -1,0 +1,34 @@
+[
+    {
+        "Model":"MLP",
+        "Accuracy":0.7585,
+        "Precision":0.879,
+        "Recall":0.3194,
+        "F1-Score":0.4685,
+        "Time(s)":133.04
+    },
+    {
+        "Model":"SVM",
+        "Accuracy":0.7087,
+        "Precision":0.6167,
+        "Recall":0.333,
+        "F1-Score":0.4325,
+        "Time(s)":44.74
+    },
+    {
+        "Model":"RF",
+        "Accuracy":0.6943,
+        "Precision":0.8518,
+        "Recall":0.1003,
+        "F1-Score":0.1795,
+        "Time(s)":18.09
+    },
+    {
+        "Model":"KNN",
+        "Accuracy":0.7753,
+        "Precision":0.927,
+        "Recall":0.3537,
+        "F1-Score":0.5121,
+        "Time(s)":0.02
+    }
+]

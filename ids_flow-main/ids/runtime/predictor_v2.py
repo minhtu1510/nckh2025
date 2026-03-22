@@ -120,7 +120,20 @@ class IDSRuntimeV2:
             }
 
         # -------- ML (Exp9 Dual-Path Stacking) --------
-        res = self.model.predict_single_dict(flow)
+        # Auto-detect: CIC CSV keys (lowercase with spaces) vs NFFlow keys (IN_PKTS, ...)
+        # CIC hints: keys like "bwd iat max", "flow duration", "tot fwd pkts"
+        _cic_hints = {"bwdiatmax", "flowduration", "totfwdpkts", "fwdpktlenmax", "totbwdpkts"}
+        _flow_norm = {re.sub(r'[^a-z0-9]+', '', k.lower()) for k in flow.keys()}
+        _is_cic = bool(_flow_norm & _cic_hints)
+
+        if _is_cic and hasattr(self.model, "predict_csv_row"):
+            # CIC-style CSV payload → use correct single-row CSV path (bypass DeDe)
+            res = self.model.predict_csv_row(flow)
+        elif hasattr(self.model, "predict_nf_flow"):
+            # NFFlow real-time payload (IN_PKTS, IN_BYTES, ...)
+            res = self.model.predict_nf_flow(flow)
+        else:
+            res = self.model.predict_single_dict(flow)
         is_attack = res.get("prediction", 0) == 1
         ml_verdict = "attack" if is_attack else "benign"
         ml_stage = res.get("stage", "exp9_ml")
@@ -159,3 +172,55 @@ class IDSRuntimeV2:
             "dede_error": res.get("error", 0.0),
         }
         return out
+
+    def predict_csv_row(self, row_dict: dict) -> dict:
+        """Predict từ 1 row CSV CICIDS2017/2018 (bỏ qua rules, chỉ dùng ML)."""
+        if not self.model:
+            return {
+                "p_attack": 0.0, "stage": "none", "verdict": "benign",
+                "family": None, "family_conf": 0.0, "rule_info": None,
+                "rule_result": {"hit": False},
+                "ml_binary": {"p_attack": 0.0, "verdict": "benign"},
+                "ml_family": {"name": None, "conf": None},
+                "final_source": "none", "ml_verdict": "benign", "dede_error": 0.0,
+            }
+        if hasattr(self.model, "predict_csv_row"):
+            res = self.model.predict_csv_row(row_dict)
+        else:
+            res = self.model.predict_single_dict(row_dict)
+        is_attack = res.get("prediction", 0) == 1
+        ml_verdict = "attack" if is_attack else "benign"
+        return {
+            "p_attack": 1.0 if is_attack else 0.0,
+            "stage": res.get("stage", "exp9_ml"),
+            "verdict": ml_verdict,
+            "family": res.get("label", "benign") if is_attack else None,
+            "family_conf": 1.0 if is_attack else 0.0,
+            "rule_info": None,
+            "rule_result": {"hit": False},
+            "ml_binary": {"p_attack": 1.0 if is_attack else 0.0, "verdict": ml_verdict},
+            "ml_family": {"name": None, "conf": None},
+            "final_source": "ml-only" if is_attack else "none",
+            "ml_verdict": ml_verdict,
+            "dede_error": res.get("error", 0.0),
+        }
+
+    def predict_csv_batch(self, row_dicts: list,
+                          use_adaptive_dede: bool = True,
+                          low_pct: float = 15.0,
+                          high_pct: float = 30.0) -> list:
+        """Predict toàn bộ batch CSV CICIDS (dùng Adaptive DeDe nếu >=10 rows).
+        Trả về list raw dicts từ Exp9IDS để app.py tự format.
+        """
+        if not self.model:
+            return [{"prediction": 0, "label": "benign", "stage": "none", "error": 0.0}
+                    for _ in row_dicts]
+        if hasattr(self.model, "predict_csv_batch"):
+            return self.model.predict_csv_batch(
+                row_dicts,
+                use_adaptive_dede=use_adaptive_dede,
+                low_pct=low_pct,
+                high_pct=high_pct,
+            )
+        # Fallback
+        return [self.predict_csv_row(r) for r in row_dicts]

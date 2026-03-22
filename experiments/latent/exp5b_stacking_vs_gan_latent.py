@@ -20,7 +20,8 @@ sys.path.insert(0, str(BASE_DIR))
 import tensorflow as tf
 from models.ensemble.stacking import (
     create_stacking_ensemble,
-    create_stacking_ensemble_gan_optimized
+    create_stacking_ensemble_gan_optimized,
+    create_max_voting_ensemble_gan_optimized
 )
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import joblib
@@ -114,7 +115,7 @@ def main():
     results = []
 
     # ── Standard Stacking ─────────────────────────────────────────────────────
-    print('\n[1] Standard Stacking (MLP+SVM+RF+KNN) on LATENT...')
+    print('\n[1] Standard Stacking (LogisticRegression + Soft-Threshold 0.35 + MLPs)...')
     std_ens = load_or_train(create_stacking_ensemble, input_dim,
                             X_tr_lat, y_tr, out_dir, 'lat_standard_clean')
     r_std_clean = evaluate(std_ens, X_lat_clean, y_clean, 'Lat_Standard_Clean')
@@ -124,9 +125,9 @@ def main():
     print(f'    GAN    → F1={r_std_gan["f1_score"]:.4f}')
 
     # ── GAN-Opt Stacking ──────────────────────────────────────────────────────
-    print('\n[2] GAN-Opt Stacking (MLP_deep+MLP_wide+KNN_5+KNN_11) on LATENT...')
-    ganopt_ens = load_or_train(create_stacking_ensemble_gan_optimized, input_dim,
-                               X_tr_lat, y_tr, out_dir, 'lat_ganopt_clean')
+    print('\n[2] GAN-Opt (MAX-PROB) Stacking (MLP_deep+MLP_wide+NB+SVM) on LATENT...')
+    ganopt_ens = load_or_train(create_max_voting_ensemble_gan_optimized, input_dim,
+                               X_tr_lat, y_tr, out_dir, 'lat_max_ganopt_clean')
     r_ganopt_clean = evaluate(ganopt_ens, X_lat_clean, y_clean, 'Lat_GAN-Opt_Clean')
     r_ganopt_gan   = evaluate(ganopt_ens, X_lat_gan,   y_gan,   'Lat_GAN-Opt_GAN')
     results += [r_ganopt_clean, r_ganopt_gan]
@@ -144,11 +145,11 @@ def main():
     print('='*80)
     print(f'\n  {"Model":<28} {"Clean F1":>10} {"GAN F1":>10}')
     print('  ' + '-'*50)
-    print(f'  {"Lat Standard (MLP+SVM+RF+KNN)":<28} '
+    print(f'  {"Lat Standard (LR threshold 0.35)":<32} '
           f'{r_std_clean["f1_score"]:>10.4f} {r_std_gan["f1_score"]:>10.4f}')
-    print(f'  {"Lat GAN-Opt (MLP+KNN vars)":<28} '
+    print(f'  {"Lat GAN-Opt (MAX-PROB RULE)":<32} '
           f'{r_ganopt_clean["f1_score"]:>10.4f} {r_ganopt_gan["f1_score"]:>10.4f}')
-    print(f'  {"DeDe+GAN-Opt (exp7 LAT)":<28} {"0.9670":>10} {"0.9251":>10}  ← reference')
+    print(f'  {"DeDe+GAN-Opt (exp7 LAT)":<32} {"0.9670":>10} {"0.9251":>10}  ← reference')
 
     print('\n  📌 Kết luận chuỗi so sánh (GAN test):')
     d1 = r_ganopt_gan["f1_score"] - r_std_gan["f1_score"]

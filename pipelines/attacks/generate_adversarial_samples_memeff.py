@@ -44,15 +44,31 @@ def create_memmap_array(filepath, shape, dtype='float32', mode='w+'):
     return np.memmap(filepath, dtype=dtype, mode=mode, shape=shape)
 
 
-def build_generator(latent_dim, output_dim):
-    """Build GAN generator (MEMORY-OPTIMIZED)"""
-    model = models.Sequential([
-        layers.Dense(64, activation='relu', input_dim=latent_dim),  # Reduced
-        layers.BatchNormalization(),
-        layers.Dense(128, activation='relu'),  # Reduced
-        layers.BatchNormalization(),
-        layers.Dense(output_dim, activation='tanh'),
-    ], name='generator')
+def build_generator(latent_dim, feature_dim, epsilon=0.25):
+    """Build GAN generator (Evasion-Optimized)"""
+    mal_input = layers.Input(shape=(feature_dim,), name='malicious_input')
+    noise_input = layers.Input(shape=(latent_dim,), name='noise_input')
+    
+    x = layers.Concatenate()([mal_input, noise_input])
+    x = layers.Dense(64, activation='relu')(x)  # Reduced
+    x = layers.BatchNormalization()(x)
+    x = layers.Dense(128, activation='relu')(x)  # Reduced
+    x = layers.BatchNormalization()(x)
+    
+    # Generate perturbation in [-1, 1]
+    perturbation = layers.Dense(feature_dim, activation='tanh')(x)
+    
+    # Scale perturbation strictly by epsilon (e.g., max 12.5% change)
+    perturbation_scaled = layers.Lambda(lambda p: p * epsilon)(perturbation)
+    
+    # Add perturbation to original malicious sample
+    adv_x = layers.Add()([mal_input, perturbation_scaled])
+    
+    # Clip to valid scaled range [-1, 1]
+    import tensorflow as tf
+    adv_x_clipped = layers.Lambda(lambda val: tf.clip_by_value(val, -1.0, 1.0))(adv_x)
+    
+    model = models.Model(inputs=[mal_input, noise_input], outputs=adv_x_clipped, name='generator')
     return model
 
 
@@ -68,20 +84,28 @@ def build_discriminator(input_dim):
     return model
 
 
-def train_gan_memory_efficient(X_malicious, latent_dim=100, epochs=100, batch_size=256):
+def train_gan_memory_efficient(X_malicious, X_benign, latent_dim=100, epochs=30, batch_size=256):
     """
-    Train GAN with memory-efficient batching
+    Train Evasion GAN with memory-efficient batching
+    D tries to distinguish: Real Benign (1) vs Fake Adversarial (0)
+    G tries to perturb Real Malicious so D predicts (1)
     """
     feature_dim = X_malicious.shape[1]
     
-    # Normalize in-place to save memory
-    X_min = X_malicious.min(axis=0)
-    X_max = X_malicious.max(axis=0)
-    X_scaled = (X_malicious - X_min) / (X_max - X_min + 1e-8)
-    X_scaled = X_scaled * 2 - 1  # [-1, 1]
+    # Normalize globally to save memory and maintain scale
+    X_combined = np.vstack([X_malicious, X_benign])
+    X_min = X_combined.min(axis=0)
+    X_max = X_combined.max(axis=0)
+    del X_combined
+    
+    X_mal_scaled = (X_malicious - X_min) / (X_max - X_min + 1e-8)
+    X_mal_scaled = X_mal_scaled * 2 - 1  # [-1, 1]
+    
+    X_ben_scaled = (X_benign - X_min) / (X_max - X_min + 1e-8)
+    X_ben_scaled = X_ben_scaled * 2 - 1  # [-1, 1]
     
     # Build models
-    generator = build_generator(latent_dim, feature_dim)
+    generator = build_generator(latent_dim, feature_dim, epsilon=0.25)
     discriminator = build_discriminator(feature_dim)
     
     discriminator.compile(
@@ -92,9 +116,10 @@ def train_gan_memory_efficient(X_malicious, latent_dim=100, epochs=100, batch_si
     
     # Build GAN
     discriminator.trainable = False
-    gan_input = layers.Input(shape=(latent_dim,))
-    gan_output = discriminator(generator(gan_input))
-    gan = models.Model(gan_input, gan_output, name='gan')
+    mal_input = layers.Input(shape=(feature_dim,))
+    noise_input = layers.Input(shape=(latent_dim,))
+    gan_output = discriminator(generator([mal_input, noise_input]))
+    gan = models.Model(inputs=[mal_input, noise_input], outputs=gan_output, name='gan')
     gan.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5),
         loss='binary_crossentropy'
@@ -103,34 +128,39 @@ def train_gan_memory_efficient(X_malicious, latent_dim=100, epochs=100, batch_si
     print(f"  Generator params: {generator.count_params():,}")
     print(f"  Training for {epochs} epochs...")
     
-    n_samples = len(X_scaled)
-    batches_per_epoch = n_samples // batch_size
+    n_samples_mal = len(X_mal_scaled)
+    n_samples_ben = len(X_ben_scaled)
+    batches_per_epoch = min(n_samples_mal, n_samples_ben) // batch_size
     
     for epoch in range(epochs):
         epoch_d_loss = []
         epoch_g_loss = []
         
         for batch in range(batches_per_epoch):
-            # Train discriminator
-            idx = np.random.randint(0, n_samples, batch_size)
-            real_samples = X_scaled[idx]
-            real_labels = np.ones((batch_size, 1))
+            # 1. Train Discriminator
+            idx_ben = np.random.randint(0, n_samples_ben, batch_size)
+            idx_mal = np.random.randint(0, n_samples_mal, batch_size)
+            
+            real_benign = X_ben_scaled[idx_ben]
+            base_malicious = X_mal_scaled[idx_mal]
             
             noise = np.random.normal(0, 1, (batch_size, latent_dim))
-            fake_samples = generator.predict(noise, verbose=0)
-            fake_labels = np.zeros((batch_size, 1))
+            fake_adversarial = generator.predict([base_malicious, noise], verbose=0)
             
             discriminator.trainable = True
-            d_loss_real = discriminator.train_on_batch(real_samples, real_labels)
-            d_loss_fake = discriminator.train_on_batch(fake_samples, fake_labels)
+            # D wants to predict 1 for true Benign and 0 for fake Adversarial
+            d_loss_real = discriminator.train_on_batch(real_benign, np.ones((batch_size, 1)))
+            d_loss_fake = discriminator.train_on_batch(fake_adversarial, np.zeros((batch_size, 1)))
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
             epoch_d_loss.append(d_loss[0])
             
-            # Train generator
+            # 2. Train Generator
             discriminator.trainable = False
             noise = np.random.normal(0, 1, (batch_size, latent_dim))
-            g_labels = np.ones((batch_size, 1))
-            g_loss = gan.train_on_batch(noise, g_labels)
+            base_malicious = X_mal_scaled[np.random.randint(0, n_samples_mal, batch_size)]
+            
+            # G wants D to predict 1 (Benign) for fake_adversarial
+            g_loss = gan.train_on_batch([base_malicious, noise], np.ones((batch_size, 1)))
             epoch_g_loss.append(g_loss)
         
         # Clear memory after each epoch
@@ -143,22 +173,25 @@ def train_gan_memory_efficient(X_malicious, latent_dim=100, epochs=100, batch_si
             print(f"  Epoch {epoch+1}/{epochs}: "
                   f"D_loss={np.mean(epoch_d_loss):.4f}, G_loss={np.mean(epoch_g_loss):.4f}")
     
-    print(f"  ✓ GAN training completed")
+    print(f"  ✓ GAN training completed (Evasion Mode)")
     return generator, X_min, X_max
 
 
-def generate_adversarial_in_batches(generator, n_samples, min_vals, max_vals,
+def generate_adversarial_in_batches(generator, X_mal_test_raw, min_vals, max_vals,
                                     output_path, latent_dim=100, batch_size=GENERATION_BATCH_SIZE):
     """
-    Generate adversarial samples in batches and save to memmap
-    Avoids creating full array in memory
+    Generate adversarial samples by perturbing test malicious samples
     """
-    feature_dim = len(min_vals)
+    n_samples, feature_dim = X_mal_test_raw.shape
     
     # Create output memmap
     X_adversarial = create_memmap_array(output_path, shape=(n_samples, feature_dim))
     
     print(f"  Generating {n_samples:,} adversarial samples in batches...")
+    
+    # Scale test data beforehand
+    X_mal_test_scaled = (X_mal_test_raw - min_vals) / (max_vals - min_vals + 1e-8)
+    X_mal_test_scaled = X_mal_test_scaled * 2 - 1
     
     for i in tqdm(range(0, n_samples, batch_size), desc="  Generating"):
         end_idx = min(i + batch_size, n_samples)
@@ -166,9 +199,10 @@ def generate_adversarial_in_batches(generator, n_samples, min_vals, max_vals,
         
         # Generate noise
         noise = np.random.normal(0, 1, (batch_size_actual, latent_dim))
+        batch_mal = X_mal_test_scaled[i:end_idx]
         
-        # Generate samples (in [-1, 1])
-        X_adv_scaled = generator.predict(noise, verbose=0)
+        # Generate adversarial samples (in [-1, 1])
+        X_adv_scaled = generator.predict([batch_mal, noise], verbose=0)
         
         # Inverse transform
         X_adv = (X_adv_scaled + 1) / 2  # [-1,1] → [0,1]
@@ -239,17 +273,21 @@ def main():
     y_test_raw = np.load(raw_baseline_dir / 'y_test.npy')
     
     malicious_train_mask = (y_train_raw == 1)
+    benign_train_mask = (y_train_raw == 0)
     X_train_malicious = X_train_raw[malicious_train_mask]
+    X_train_benign = X_train_raw[benign_train_mask]
     
-    print(f"  ✓ Loaded {X_train_malicious.shape[0]:,} malicious samples for GAN")
+    print(f"  ✓ Loaded {X_train_malicious.shape[0]:,} malicious samples for GAN origin")
+    print(f"  ✓ Loaded {X_train_benign.shape[0]:,} benign samples for GAN target")
     
     # ========================================================================
     # STEP 2: Train GAN
     # ========================================================================
-    print(f"\n[STEP 2] Training GAN (memory-efficient)...")
+    print(f"\n[STEP 2] Training Targeted EVASION GAN (memory-efficient)...")
     
     generator, min_vals, max_vals = train_gan_memory_efficient(
         X_train_malicious,
+        X_train_benign,
         latent_dim=LATENT_DIM,
         epochs=GAN_EPOCHS,
         batch_size=GAN_BATCH_SIZE
@@ -257,6 +295,7 @@ def main():
     
     # Clear memory
     del X_train_malicious
+    del X_train_benign
     
     # ========================================================================
     # STEP 3: Generate adversarial in batches
@@ -270,13 +309,14 @@ def main():
     n_malicious_test = malicious_test_mask.sum()
     
     X_test_benign = X_test_raw[benign_test_mask]
+    X_test_malicious = X_test_raw[malicious_test_mask]
     
     # Generate adversarial malicious (in batches to memmap)
     temp_dir = RAW_DATA_DIR / "temp"
     temp_dir.mkdir(exist_ok=True)
     
     X_test_mal_adversarial = generate_adversarial_in_batches(
-        generator, n_malicious_test, min_vals, max_vals,
+        generator, X_test_malicious, min_vals, max_vals,
         temp_dir / "adversarial_malicious.mmap",
         LATENT_DIM, GENERATION_BATCH_SIZE
     )
