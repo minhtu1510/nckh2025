@@ -3,8 +3,8 @@
     0,
     5
   ],
-  "low_pct": 85,
+  "low_pct": 50,
   "high_pct": 99,
   "dede_epochs": 80,
-  "created_at": "20260322_090013"
+  "created_at": "20260322_225917"
 }
