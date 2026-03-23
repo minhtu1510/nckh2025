@@ -106,7 +106,6 @@ class TwoPathHybridLatent:
         # BƯỚC ĐỘT PHÁ CỦA BẠN: DYNAMIC MIXTURE OF EXPERTS (Soft-Routing)
         # Đánh trọng số linh động cho GAN-Opt tuỳ độ méo (Error) của DeDe
         # Khớp Trọng số động: Sử dụng HÀM PHI TUYẾN (CĂN BẬC 2 - SQUARE ROOT)
-        # Bẻ cong phương trình: Lỗi chỉ cần nhích lên 25% là GAN-Opt có ngay 50% tiếng nói!
         scale = self.high_thr - self.low_thr
         if scale == 0: scale = 1e-9
         w_gan = np.clip((errs - self.low_thr) / scale, 0.0, 1.0)
@@ -316,7 +315,9 @@ def main():
     if DEDE_CLEAN_DIR.exists():
         print('\n[INIT] Loading clean DeDe for threshold reference...')
         dede_clean = load_dede(DEDE_CLEAN_DIR)
-        errs_c = dede_clean.get_reconstruction_error(X_te_raw_clean)
+        
+        # BƯỚC SỬA MỤC TIÊU: Lấy Threshold trên tập Train_Clean (KHÔNG ĐƯỢC CHẠM VÀO TEST)
+        errs_c = dede_clean.get_reconstruction_error(X_tr_clean_raw)
         lt_c   = float(np.percentile(errs_c, args.low_pct))
         ht_c   = float(np.percentile(errs_c, args.high_pct))
         print(f'  Clean DeDe threshold: low={lt_c:.6f}  high={ht_c:.6f}')
@@ -379,8 +380,9 @@ def main():
             print(f'\n  [1/3] Retraining DeDe on poisoned RAW...')
             dede_p_dir = rate_cache / 'dede_poison'
             dede_p = train_dede(X_tr_p_raw, X_val_p, dede_p_dir, epochs=args.dede_epochs)
-            # Calibrate threshold trên poisoned val
-            errs_p = dede_p.get_reconstruction_error(X_val_p)
+            
+            # BƯỚC SỬA MỤC TIÊU: Calibrate threshold trên poisoned TRAIN (Ngăn chặn Rò rỉ Data)
+            errs_p = dede_p.get_reconstruction_error(X_tr_p_raw)
             lt_p   = float(np.percentile(errs_p, args.low_pct))
             ht_p   = float(np.percentile(errs_p, args.high_pct))
             

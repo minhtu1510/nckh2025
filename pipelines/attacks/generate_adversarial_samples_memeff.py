@@ -272,13 +272,15 @@ def main():
     X_test_raw = np.load(raw_baseline_dir / 'X_test.npy')
     y_test_raw = np.load(raw_baseline_dir / 'y_test.npy')
     
-    malicious_train_mask = (y_train_raw == 1)
-    benign_train_mask = (y_train_raw == 0)
-    X_train_malicious = X_train_raw[malicious_train_mask]
-    X_train_benign = X_train_raw[benign_train_mask]
+    # BƯỚC SỬA MỤC TIÊU: Tránh Rò rỉ Data (Data Leakage)
+    # Lấy tập Test để Train GAN (Vì Attacker không được quyền truy cập tập Train nội bộ của hệ thống)
+    malicious_test_mask = (y_test_raw == 1)
+    benign_test_mask = (y_test_raw == 0)
+    X_gan_train_malicious = X_test_raw[malicious_test_mask]
+    X_gan_train_benign = X_test_raw[benign_test_mask]
     
-    print(f"  ✓ Loaded {X_train_malicious.shape[0]:,} malicious samples for GAN origin")
-    print(f"  ✓ Loaded {X_train_benign.shape[0]:,} benign samples for GAN target")
+    print(f"  ✓ Loaded {X_gan_train_malicious.shape[0]:,} malicious TEST samples for GAN origin")
+    print(f"  ✓ Loaded {X_gan_train_benign.shape[0]:,} benign TEST samples for GAN target")
     
     # ========================================================================
     # STEP 2: Train GAN
@@ -286,16 +288,16 @@ def main():
     print(f"\n[STEP 2] Training Targeted EVASION GAN (memory-efficient)...")
     
     generator, min_vals, max_vals = train_gan_memory_efficient(
-        X_train_malicious,
-        X_train_benign,
+        X_gan_train_malicious,
+        X_gan_train_benign,
         latent_dim=LATENT_DIM,
         epochs=GAN_EPOCHS,
         batch_size=GAN_BATCH_SIZE
     )
     
     # Clear memory
-    del X_train_malicious
-    del X_train_benign
+    del X_gan_train_malicious
+    del X_gan_train_benign
     
     # ========================================================================
     # STEP 3: Generate adversarial in batches

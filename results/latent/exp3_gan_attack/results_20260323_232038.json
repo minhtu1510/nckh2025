@@ -1,0 +1,58 @@
+[
+    {
+        "Model":"MLP",
+        "Accuracy":0.7419,
+        "Precision":0.8636,
+        "Recall":0.2681,
+        "F1-Score":0.4092
+    },
+    {
+        "Model":"SVM",
+        "Accuracy":0.7427,
+        "Precision":0.7147,
+        "Recall":0.3795,
+        "F1-Score":0.4957
+    },
+    {
+        "Model":"RF",
+        "Accuracy":0.695,
+        "Precision":0.8246,
+        "Recall":0.108,
+        "F1-Score":0.191
+    },
+    {
+        "Model":"KNN",
+        "Accuracy":0.7325,
+        "Precision":0.8853,
+        "Recall":0.2269,
+        "F1-Score":0.3613
+    },
+    {
+        "Model":"NB",
+        "Accuracy":0.7345,
+        "Precision":0.5989,
+        "Recall":0.6163,
+        "F1-Score":0.6075
+    },
+    {
+        "Model":"Ensemble Hard",
+        "Accuracy":0.7241,
+        "Precision":0.8568,
+        "Recall":0.2068,
+        "F1-Score":0.3332
+    },
+    {
+        "Model":"Ensemble Soft",
+        "Accuracy":0.7311,
+        "Precision":0.874,
+        "Recall":0.2259,
+        "F1-Score":0.359
+    },
+    {
+        "Model":"Ensemble Weighted Soft",
+        "Accuracy":0.7434,
+        "Precision":0.8714,
+        "Recall":0.2699,
+        "F1-Score":0.4121
+    }
+]
