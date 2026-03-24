@@ -119,9 +119,12 @@ def main():
     input_dim  = X_tr_clean.shape[1]
     print(f'    dim={input_dim}, train={len(X_tr_clean):,}, test={len(X_te_clean):,}')
 
+    from sklearn.model_selection import train_test_split
+    X_train_c, X_val_c, y_train_c, y_val_c = train_test_split(X_tr_clean, y_tr_clean, test_size=0.2, random_state=42)
+
     # Train CLEAN stacking ensemble (baseline reference)
     print('\n[STEP 1] Training CLEAN stacking ensemble (reference)...')
-    ens_clean = train_stacking(X_tr_clean, y_tr_clean, input_dim,
+    ens_clean = train_stacking(X_train_c, y_train_c, input_dim,
                                output_base, label='clean')
     m_clean = evaluate(ens_clean, X_te_clean, y_te_clean, 'STACKING_CLEAN')
     print(f'    Clean: Acc={m_clean["Accuracy"]:.4f}, F1={m_clean["F1-Score"]:.4f}')
@@ -140,10 +143,13 @@ def main():
             print(f'    Flipped labels: {n_flipped:,} ({flip_pct:.1f}%)')
             print(f'    Train on POISONED latent → Test on CLEAN latent')
 
+            from sklearn.model_selection import train_test_split
+            X_train_v, X_val_v, y_train_v, y_val_v = train_test_split(X_tr_p, y_tr_p, test_size=0.2, random_state=42)
+
             # Train stacking on POISONED latent data
             out_rate = output_base / f'poison_{rate}'
             out_rate.mkdir(exist_ok=True)
-            ens_p = train_stacking(X_tr_p, y_tr_p, input_dim,
+            ens_p = train_stacking(X_train_v, y_train_v, input_dim,
                                    out_rate, label=f'poison_{rate}')
 
             # Evaluate on clean test

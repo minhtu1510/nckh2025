@@ -111,13 +111,16 @@ def main():
     X_lat_clean = dual_enc.encode(X_raw_clean)
     print(f'  Clean test (latent): {len(X_lat_clean):,} × {X_lat_clean.shape[1]}')
 
+    from sklearn.model_selection import train_test_split
+    X_train_lat, X_val_lat, y_train_lat, y_val_lat = train_test_split(X_tr_lat, y_tr, test_size=0.2, random_state=42)
+
     input_dim = X_tr_lat.shape[1]
     results = []
 
     # ── Standard Stacking ─────────────────────────────────────────────────────
     print('\n[1] Standard Stacking (LogisticRegression + Soft-Threshold 0.35 + MLPs)...')
     std_ens = load_or_train(create_stacking_ensemble, input_dim,
-                            X_tr_lat, y_tr, out_dir, 'lat_standard_clean')
+                            X_train_lat, y_train_lat, out_dir, 'lat_standard_clean')
     r_std_clean = evaluate(std_ens, X_lat_clean, y_clean, 'Lat_Standard_Clean')
     r_std_gan   = evaluate(std_ens, X_lat_gan,   y_gan,   'Lat_Standard_GAN')
     results += [r_std_clean, r_std_gan]
@@ -127,7 +130,7 @@ def main():
     # ── GAN-Opt Stacking ──────────────────────────────────────────────────────
     print('\n[2] GAN-Opt (MAX-PROB) Stacking (MLP_deep+MLP_wide+NB+SVM) on LATENT...')
     ganopt_ens = load_or_train(create_max_voting_ensemble_gan_optimized, input_dim,
-                               X_tr_lat, y_tr, out_dir, 'lat_max_ganopt_clean')
+                               X_train_lat, y_train_lat, out_dir, 'lat_max_ganopt_clean')
     r_ganopt_clean = evaluate(ganopt_ens, X_lat_clean, y_clean, 'Lat_GAN-Opt_Clean')
     r_ganopt_gan   = evaluate(ganopt_ens, X_lat_gan,   y_gan,   'Lat_GAN-Opt_GAN')
     results += [r_ganopt_clean, r_ganopt_gan]

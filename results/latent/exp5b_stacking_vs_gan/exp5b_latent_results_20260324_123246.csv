@@ -1,0 +1,5 @@
+model,accuracy,precision,recall,f1_score,note
+Lat_Standard_Clean,0.98452,0.969873,0.98413,0.97695,no_dede_latent
+Lat_Standard_GAN,0.725603,0.871533,0.207386,0.335046,no_dede_latent
+Lat_GAN-Opt_Clean,0.841092,0.685347,0.967451,0.802324,no_dede_latent
+Lat_GAN-Opt_GAN,0.781272,0.63952,0.787994,0.706036,no_dede_latent

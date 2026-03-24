@@ -36,6 +36,11 @@ def build_mlp(input_dim):
     return model
 
 def train_eval_models(X_train, y_train, X_test, y_test, input_dim, save_dir=None):
+    from sklearn.model_selection import train_test_split
+    X_train_model, X_val_model, y_train_model, y_val_model = train_test_split(
+        X_train, y_train, test_size=0.2, random_state=RANDOM_STATE
+    )
+
     rows = []
     
     if save_dir:
@@ -47,8 +52,8 @@ def train_eval_models(X_train, y_train, X_test, y_test, input_dim, save_dir=None
     print(f'  [1/5] MLP  Dense({input_dim})→Dense(1)  epochs=30  batch=64 ...', flush=True)
     t0  = time.time()
     mlp = build_mlp(input_dim)
-    mlp.fit(X_train, y_train, epochs=30, batch_size=64,
-            validation_split=0.2, verbose=0,
+    mlp.fit(X_train_model, y_train_model, epochs=30, batch_size=64,
+            validation_data=(X_val_model, y_val_model), verbose=0,
             callbacks=[EarlyStopping(monitor='val_loss', patience=8,
                                      restore_best_weights=True, verbose=0)])
     t_mlp = time.time() - t0
@@ -63,7 +68,7 @@ def train_eval_models(X_train, y_train, X_test, y_test, input_dim, save_dir=None
     print(f'  [2/5] SVM  LinearSVC(C=1.0) ...', flush=True)
     t0  = time.time()
     svm = LinearSVC(C=1.0, max_iter=5000, random_state=RANDOM_STATE)
-    svm.fit(X_train, y_train)
+    svm.fit(X_train_model, y_train_model)
     t_svm = time.time() - t0
     pred  = svm.predict(X_test)
     m     = compute_metrics(y_test, pred)
@@ -76,7 +81,7 @@ def train_eval_models(X_train, y_train, X_test, y_test, input_dim, save_dir=None
     print(f'  [3/5] RF   n_estimators=100 ...', flush=True)
     t0 = time.time()
     rf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=4)
-    rf.fit(X_train, y_train)
+    rf.fit(X_train_model, y_train_model)
     t_rf = time.time() - t0
     pred = rf.predict(X_test)
     m    = compute_metrics(y_test, pred)
@@ -89,7 +94,7 @@ def train_eval_models(X_train, y_train, X_test, y_test, input_dim, save_dir=None
     print(f'  [4/5] KNN  n_neighbors=5 ...', flush=True)
     t0  = time.time()
     knn = KNeighborsClassifier(n_neighbors=5, n_jobs=4)
-    knn.fit(X_train, y_train)
+    knn.fit(X_train_model, y_train_model)
     t_knn = time.time() - t0
     pred  = knn.predict(X_test)
     m     = compute_metrics(y_test, pred)
@@ -102,7 +107,7 @@ def train_eval_models(X_train, y_train, X_test, y_test, input_dim, save_dir=None
     print(f'  [5/5] NB   GaussianNB ...', flush=True)
     t0  = time.time()
     nb = GaussianNB()
-    nb.fit(X_train, y_train)
+    nb.fit(X_train_model, y_train_model)
     t_nb = time.time() - t0
     pred  = nb.predict(X_test)
     m     = compute_metrics(y_test, pred)

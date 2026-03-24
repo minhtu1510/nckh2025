@@ -272,6 +272,11 @@ def main():
     trigger_dir    = raw_dir / f'exp5_trigger/trigger_{args.trigger_rate}'
     X_tr_clean_raw = np.load(raw_dir / 'exp1_baseline/X_train.npy')
     y_tr_clean     = np.load(raw_dir / 'exp1_baseline/y_train.npy')
+    
+    from sklearn.model_selection import train_test_split
+    X_train_clean_raw, X_val_clean_raw, y_train_clean_v, y_val_clean_v = train_test_split(
+        X_tr_clean_raw, y_tr_clean, test_size=0.2, random_state=42
+    )
 
     all_results = []
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -284,8 +289,8 @@ def main():
         print('\n[INIT] Loading clean DeDe for threshold reference...')
         dede_clean = load_dede(DEDE_CLEAN_DIR)
         
-        # BƯỚC SỬA MỤC TIÊU: Lấy Threshold trên tập Train_Clean (KHÔNG ĐƯỢC CHẠM VÀO TEST)
-        errs_c = dede_clean.get_reconstruction_error(X_tr_clean_raw)
+        # BƯỚC SỬA MỤC TIÊU: Lấy Threshold trên tập VALIDATION thay vì TRAIN
+        errs_c = dede_clean.get_reconstruction_error(X_val_clean_raw)
         lt_c   = float(np.percentile(errs_c, args.low_pct))
         ht_c   = float(np.percentile(errs_c, args.high_pct))
         print(f'  Clean DeDe threshold: low={lt_c:.6f}  high={ht_c:.6f}')
@@ -313,7 +318,6 @@ def main():
 
         X_tr_p_raw = np.load(poison_raw / 'X_train.npy')
         y_tr_p     = np.load(poison_raw / 'y_train.npy')
-        X_val_p    = np.load(poison_raw / 'X_test.npy')
         flips      = (y_tr_p != y_tr_clean).sum()
         print(f'  RAW poisoned train: {len(X_tr_p_raw):,} × {X_tr_p_raw.shape[1]}'
               f'  ({flips:,} flips = {flips/len(y_tr_clean)*100:.1f}%)')
@@ -327,6 +331,17 @@ def main():
         X_tr_p_lat = np.load(poison_lat / 'X_train.npy')
         y_tr_p_lat = np.load(poison_lat / 'y_train.npy')
         print(f'  Poisoned latent train: {X_tr_p_lat.shape}  (poisoned encoder)')
+
+        # Split everything consistently
+        indices = np.arange(len(X_tr_p_raw))
+        train_idx, val_idx = train_test_split(indices, test_size=0.2, random_state=42)
+        
+        X_train_raw_p = X_tr_p_raw[train_idx]
+        X_val_raw_p   = X_tr_p_raw[val_idx]
+        X_train_lat_p = X_tr_p_lat[train_idx]
+        X_val_lat_p   = X_tr_p_lat[val_idx]
+        y_train_lat_p = y_tr_p_lat[train_idx]
+        y_val_lat_p   = y_tr_p_lat[val_idx]
 
         # Load poisoned DualEncoder
         if not enc_p_dir.exists():
@@ -347,10 +362,10 @@ def main():
         else:
             print(f'\n  [1/3] Retraining DeDe on poisoned RAW...')
             dede_p_dir = rate_cache / 'dede_poison'
-            dede_p = train_dede(X_tr_p_raw, X_val_p, dede_p_dir, epochs=args.dede_epochs)
+            dede_p = train_dede(X_train_raw_p, X_val_raw_p, dede_p_dir, epochs=args.dede_epochs)
             
-            # BƯỚC SỬA MỤC TIÊU: Calibrate threshold trên poisoned TRAIN (Ngăn chặn Rò rỉ Data)
-            errs_p = dede_p.get_reconstruction_error(X_tr_p_raw)
+            # BƯỚC SỬA MỤC TIÊU: Calibrate threshold trên poisoned VAL (Ngăn chặn Rò rỉ Data)
+            errs_p = dede_p.get_reconstruction_error(X_val_raw_p)
             lt_p   = float(np.percentile(errs_p, args.low_pct))
             ht_p   = float(np.percentile(errs_p, args.high_pct))
             
@@ -378,7 +393,7 @@ def main():
         X_gan_pure = X_gan_raw[y_gan_raw == 1]
         y_gan_pure = y_gan_raw[y_gan_raw == 1]
         
-        num_adv = int(len(X_tr_p_raw) * 0.05)  # Trộn 5% của 300k = ~15k GAN
+        num_adv = int(len(X_train_raw_p) * 0.05)  # Trộn 5% của 300k = ~15k GAN
         idx = np.random.choice(len(X_gan_pure), size=min(num_adv, len(X_gan_pure)), replace=False)
         X_adv_raw = X_gan_pure[idx]
         y_adv = y_gan_pure[idx]
@@ -386,8 +401,8 @@ def main():
         print(f'      Vaccine: Đang mã hoá {len(X_adv_raw):,} GAN packets qua DualEncoder...')
         X_adv_lat = dual_enc_p.encode(X_adv_raw)
         
-        X_tr_mix = np.vstack((X_tr_p_lat, X_adv_lat))
-        y_tr_mix = np.concatenate((y_tr_p_lat, y_adv))
+        X_tr_mix = np.vstack((X_train_lat_p, X_adv_lat))
+        y_tr_mix = np.concatenate((y_train_lat_p, y_adv))
         
         # Lắc đều nồi cháo
         s_idx = np.random.permutation(len(X_tr_mix))
