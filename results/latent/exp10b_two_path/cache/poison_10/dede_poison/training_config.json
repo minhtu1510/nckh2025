@@ -1,0 +1,8 @@
+{
+  "input_dim": 50,
+  "latent_dim": 64,
+  "mask_ratio": 0.5,
+  "learning_rate": 0.001,
+  "best_val_loss": 0.0013880631886422634,
+  "trained_on": "poisoned"
+}
